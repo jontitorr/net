@@ -1,3 +1,4 @@
+#include <iostream>
 #include <net/http.hpp>
 
 using net::HttpConnection;
@@ -21,9 +22,10 @@ int main()
             return;
         }
 
-        std::printf("Status code: %hu\n", res->status_code);
-        std::printf("Status message: %s\n", res->status_message.c_str());
-        std::printf("Body: %s\n", res->body.c_str());
+        std::cout << "Status code: " << static_cast<uint8_t>(res->status_code)
+                  << '\n';
+        std::cout << "Status message: " << res->status_message << '\n';
+        std::cout << "Body: " << res->body << '\n';
     };
 
     do_request(

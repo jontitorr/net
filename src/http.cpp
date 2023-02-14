@@ -9,14 +9,10 @@
 #define NOMINMAX
 #include <WS2tcpip.h>
 #include <WinSock2.h>
-
-#define SYS_POLL ::WSAPoll
 #else
 #include <netdb.h>
 #include <netinet/in.h>
 #include <poll.h>
-
-#define SYS_POLL ::poll
 #endif
 
 namespace {
@@ -49,7 +45,7 @@ void init()
 bool iequals(std::string_view a, std::string_view b)
 {
     return std::equal(a.begin(), a.end(), b.begin(), b.end(),
-        [](char a, char b) { return std::tolower(a) == std::tolower(b); });
+        [](char l, char r) { return std::tolower(l) == std::tolower(r); });
 }
 
 Result<HttpMethod> http_method_from_str(std::string_view str)
@@ -932,14 +928,16 @@ Result<void> HttpServer::run() const
 
     while (m_running) {
 #ifdef _WIN32
-        using nfds_t = ULONG;
-#endif
-
-        if (SYS_POLL(events.data(), static_cast<nfds_t>(num_events), -1) < 0) {
+        if (::WSAPoll(events.data(), static_cast<ULONG>(num_events), -1) < 0) {
+            return tl::make_unexpected(
+                std::error_code(WSAGetLastError(), std::system_category()));
+        }
+#else
+        if (::poll(events.data(), num_events, -1) < 0) {
             return tl::make_unexpected(
                 std::error_code(errno, std::system_category()));
         }
-
+#endif
         for (size_t i {}; i < num_events; ++i) {
             const auto& event = events.at(i);
 
@@ -993,6 +991,7 @@ Result<void> HttpServer::handle_request(
     if (!m_routes.contains(req.method)
         || !m_routes.at(req.method).contains(path)) {
         if (const auto res = conn.respond({ .status_code = HttpStatus::NotFound,
+                .status_message = {},
                 .body = {},
                 .headers = { { "Connection", "close" } } });
             !res) {

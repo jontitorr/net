@@ -156,15 +156,16 @@ inline net::Result<void> http_poll_socket(const net::HttpConnection& http_conn,
 
 template<typename Stream, typename Container>
 net::Result<void> read_until_size_is(
-    const Stream& stream, Container& container, std::size_t target_size)
+    const Stream& stream, Container& container, size_t target_size)
 {
     if (container.size() < target_size) {
         auto needed = target_size - container.size();
         container.resize(container.size() + needed);
 
         do {
-            const auto res = stream.read(std::as_writable_bytes(std::span {
-                container.data() + container.size() - needed, needed }));
+            const auto res = stream.read(
+                std::as_writable_bytes(std::span { container }.subspan(
+                    container.size() - needed, needed)));
 
             if (!res) {
                 return tl::make_unexpected(res.error());

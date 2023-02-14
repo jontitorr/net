@@ -147,23 +147,12 @@ net::Result<std::array<std::byte, 16>> parse_ipv6_addr(
     return result;
 }
 
-std::array<char, 2> get_padded_hex(uint8_t byte)
+constexpr std::array<char, 16> HEX_CHARS { '0', '1', '2', '3', '4', '5', '6',
+    '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f' };
+
+constexpr std::array<char, 2> get_padded_hex(uint8_t byte)
 {
-    std::array<char, 2> str;
-    str[0] = (byte >> 4) & 0x0f;
-    str[1] = byte & 0x0f;
-
-    for (auto& c : str) {
-        // base for converting single digit numbers to ASCII is 48
-        // base for 10-16 to become lower-case characters a-f is 87
-        if (c > 9) {
-            c += 39;
-        }
-
-        c += 48;
-    }
-
-    return str;
+    return { HEX_CHARS.at((byte >> 4) & 0x0f), HEX_CHARS.at(byte & 0x0f) };
 }
 } // namespace
 
