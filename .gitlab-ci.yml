@@ -17,6 +17,8 @@ build:
 package:
   stage: package
   script:
+    - cmake -S . -B build -G Ninja
+    - cmake --build build --config Release
     - cd build && cpack --verbose
   artifacts:
     paths:
