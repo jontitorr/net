@@ -1,5 +1,8 @@
 image: gcc
 
+variables:
+  file_changes: "**/{*.hpp,*.cpp,CMakeLists.txt,.gitlab-ci.yml}"
+
 stages:
   - build
   - package
@@ -13,6 +16,9 @@ build:
   script:
     - cmake -S . -B build -G Ninja
     - cmake --build build --config Release
+  rules:
+    - changes:
+        - $file_changes
 
 package:
   stage: package
@@ -20,6 +26,11 @@ package:
     - cmake -S . -B build -G Ninja
     - cmake --build build --config Release
     - cd build && cpack --verbose
+  dependencies:
+    - build
+  rules:
+    - changes:
+        - $file_changes
   artifacts:
     paths:
       - build/*.deb
