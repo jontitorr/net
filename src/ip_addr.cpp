@@ -73,11 +73,11 @@ int8_t ascii_to_hex(char c)
     c |= 0x20;
 
     if (c >= '0' && c <= '9') {
-        return c - '0';
+        return static_cast<int8_t>(c - '0');
     }
 
     if (c >= 'a' && c <= 'f') {
-        return (c - 'a') + 10;
+        return static_cast<int8_t>((c - 'a') + 10);
     }
 
     return -1;
