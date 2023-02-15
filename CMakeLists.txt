@@ -30,9 +30,7 @@ string(TOLOWER ${PROJECT_NAME} PROJECT_NAME_LOWERCASE)
 string(TOUPPER ${PROJECT_NAME} PROJECT_NAME_UPPERCASE)
 
 option(BUILD_SHARED_LIBS "Build shared libraries" ON)
-option(${PROJECT_NAME}_BUILD_EXAMPLES "Build the examples"
-       ${${PROJECT_NAME}_MASTER_PROJECT}
-)
+option(${PROJECT_NAME}_BUILD_EXAMPLES "Build the examples" OFF)
 option(${PROJECT_NAME}_INSTALL "Generate the install target" ON)
 
 if(BUILD_SHARED_LIBS)
@@ -85,9 +83,6 @@ target_include_directories(
     tl-expected
     INTERFACE $<BUILD_INTERFACE:${CMAKE_BINARY_DIR}/_deps/tl-expected-src>
               $<INSTALL_INTERFACE:include>
-)
-install(DIRECTORY ${CMAKE_BINARY_DIR}/_deps/tl-expected-src/tl
-        DESTINATION include
 )
 
 file(GLOB_RECURSE sources CONFIGURE_DEPENDS "include/*.hpp" "src/*.cpp")
@@ -154,8 +149,8 @@ if(${PROJECT_NAME}_INSTALL)
         RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
         ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
         INCLUDES
-        DESTINATION include
-        PUBLIC_HEADER DESTINATION include
+        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+        PUBLIC_HEADER DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
     )
 
     install(
@@ -165,8 +160,12 @@ if(${PROJECT_NAME}_INSTALL)
         DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME}
     )
 
+    install(DIRECTORY ${CMAKE_BINARY_DIR}/_deps/tl-expected-src/tl
+            DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+    )
+
     configure_file(
-        ${CMAKE_CURRENT_LIST_DIR}/cmake/version.h.in
+        ${CMAKE_CURRENT_SOURCE_DIR}/cmake/version.h.in
         include/${PROJECT_NAME_LOWERCASE}/version.h @ONLY
     )
 
@@ -177,7 +176,10 @@ if(${PROJECT_NAME}_INSTALL)
         DESTINATION include/${PROJECT_NAME_LOWERCASE}
     )
 
-    install(DIRECTORY include/${PROJECT_NAME_LOWERCASE} DESTINATION include)
+    install(
+        DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/include/${PROJECT_NAME_LOWERCASE}
+        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+    )
 
     include(CMakePackageConfigHelpers)
 
@@ -188,7 +190,7 @@ if(${PROJECT_NAME}_INSTALL)
     )
 
     configure_package_config_file(
-        ${CMAKE_CURRENT_LIST_DIR}/cmake/Config.cmake.in
+        ${CMAKE_CURRENT_SOURCE_DIR}/cmake/Config.cmake.in
         ${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}Config.cmake
         INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME}
     )
@@ -197,4 +199,20 @@ if(${PROJECT_NAME}_INSTALL)
                   ${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}ConfigVersion.cmake
             DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME}
     )
+
+    set(CPACK_PACKAGE_VENDOR Xminent)
+    set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "A networking library for C++")
+    set(CPACK_PACKAGE_DESCRIPTION "A networking library for C++")
+    set(CPACK_PACKAGE_CONTACT "mail@xminent.com")
+    set(CPACK_DEBIAN_PACKAGE_DESCRIPTION "A networking library for C++")
+
+    if(WIN32)
+        set(CPACK_GENERATOR ZIP)
+    elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        set(CPACK_GENERATOR "DEB;RPM")
+    else()
+        set(CPACK_GENERATOR "TBZ2")
+    endif()
+
+    include(CPack)
 endif()

@@ -1,0 +1,24 @@
+image: gcc
+
+stages:
+  - build
+  - package
+
+before_script:
+  - apt-get update --yes
+  - apt-get install --yes cmake ninja-build rpm
+
+build:
+  stage: build
+  script:
+    - cmake -S . -B build -G Ninja
+    - cmake --build build --config Release
+
+package:
+  stage: package
+  script:
+    - cd build && cpack --verbose
+  artifacts:
+    paths:
+      - build/*.deb
+      - build/*.rpm
