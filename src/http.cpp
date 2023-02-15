@@ -35,7 +35,7 @@ void init()
     [[maybe_unused]] static const auto _ = [] {
 #ifdef _WIN32
         WSADATA wsa_data {};
-        const auto res = WSAStartup(MAKEWORD(2, 2), &wsa_data);
+        [[maybe_unused]] const auto res = WSAStartup(MAKEWORD(2, 2), &wsa_data);
         assert(res == 0);
 #endif
         return 0;
