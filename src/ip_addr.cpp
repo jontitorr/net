@@ -1,6 +1,5 @@
 #include <cstring>
 #include <iomanip>
-#include <iostream>
 #include <net/ip_addr.hpp>
 #include <numeric>
 #include <span>

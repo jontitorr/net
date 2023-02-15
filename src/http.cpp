@@ -1,7 +1,6 @@
 #include <algorithm>
 #include <cassert>
 #include <cstring>
-#include <iostream>
 #include <net/http.hpp>
 #include <numeric>
 
@@ -284,8 +283,6 @@ Result<HttpResponse> receive_http_response(auto& stream)
                 return tl::make_unexpected(
                     std::make_error_code(std::errc::connection_reset));
             }
-
-            std::cout << "New chunked body: " << body << '\n';
 
             if (bytes_received + *res >= body.length()) {
                 body.resize((body.length() + *res) * 2);

@@ -1,6 +1,5 @@
 #include <cassert>
 #include <cstring>
-#include <iostream>
 #include <net/ssl.hpp>
 #include <numeric>
 
