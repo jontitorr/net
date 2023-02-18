@@ -514,15 +514,16 @@ void WebSocketClient::process_data(std::vector<std::byte>& data)
                     << 8
                 | uint64_t { static_cast<uint8_t>(data[3]) };
         } else if (frame.payload_length == 127) {
-            frame.payload_length = uint64_t { static_cast<uint8_t>(data[2]) }
-                    << 56
-                | uint64_t { static_cast<uint8_t>(data[3]) } << 48
-                | uint64_t { static_cast<uint8_t>(data[4]) } << 40
-                | uint64_t { static_cast<uint8_t>(data[5]) } << 32
-                | uint64_t { static_cast<uint8_t>(data[6]) } << 24
-                | uint64_t { static_cast<uint8_t>(data[7]) } << 16
-                | uint64_t { static_cast<uint8_t>(data[8]) } << 8
-                | uint64_t { static_cast<uint8_t>(data[9]) };
+            frame.payload_length = [&data] {
+                uint64_t ret {};
+
+                for (size_t i {}; i < 8; ++i) {
+                    ret |= uint64_t { static_cast<uint8_t>(data[i + 2]) }
+                        << (8 * (7 - i));
+                }
+
+                return ret;
+            }();
         }
 
         if (frame.mask) {
@@ -534,8 +535,8 @@ void WebSocketClient::process_data(std::vector<std::byte>& data)
         if (const auto res = std::visit(
                 [&data, payload_length = frame.payload_length, payload_start](
                     const auto& stream) {
-                    return read_until_size_is(
-                        stream, data, payload_start + payload_length);
+                    return read_until_size_is(stream, data,
+                        static_cast<size_t>(payload_start + payload_length));
                 },
                 m_http_connection.stream());
             !res) {
@@ -647,14 +648,11 @@ Result<void> WebSocketClient::send_raw(const RawMessage& message)
         frame.push_back(static_cast<std::byte>(payload_size));
     } else {
         frame.push_back(std::byte { 127 } | std::byte { 0b10000000 });
-        frame.push_back(static_cast<std::byte>((payload_size >> 56) & 0xFF));
-        frame.push_back(static_cast<std::byte>((payload_size >> 48) & 0xFF));
-        frame.push_back(static_cast<std::byte>((payload_size >> 40) & 0xFF));
-        frame.push_back(static_cast<std::byte>((payload_size >> 32) & 0xFF));
-        frame.push_back(static_cast<std::byte>((payload_size >> 24) & 0xFF));
-        frame.push_back(static_cast<std::byte>((payload_size >> 16) & 0xFF));
-        frame.push_back(static_cast<std::byte>((payload_size >> 8) & 0xFF));
-        frame.push_back(static_cast<std::byte>(payload_size & 0xFF));
+
+        for (size_t i {}; i < 8; ++i) {
+            frame.push_back(
+                static_cast<std::byte>((payload_size >> (56 - i * 8)) & 0xFF));
+        }
     }
 
     // Masking key

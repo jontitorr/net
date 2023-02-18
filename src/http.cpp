@@ -380,7 +380,8 @@ Result<HttpRequest> receive_http_request(auto& stream)
 
     const auto content_length = [&headers]() -> size_t {
         if (headers.contains("Content-Length")) {
-            return std::stoull(headers.at("Content-Length"));
+            return static_cast<size_t>(
+                std::stoull(headers.at("Content-Length")));
         }
 
         return 0;
