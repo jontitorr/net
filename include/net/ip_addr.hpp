@@ -1,7 +1,7 @@
 #pragma once
 #include <array>
+#include <net/export.h>
 #include <net/util.hpp>
-#include <net_export.h>
 #include <string_view>
 
 namespace net {

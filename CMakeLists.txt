@@ -91,7 +91,9 @@ add_library(${PROJECT_NAME} ${sources})
 
 include(GenerateExportHeader)
 
-generate_export_header(${PROJECT_NAME})
+generate_export_header(
+    ${PROJECT_NAME} EXPORT_FILE_NAME export/${PROJECT_NAME_LOWERCASE}/export.h
+)
 
 target_compile_definitions(
     ${PROJECT_NAME}
@@ -103,7 +105,7 @@ target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_20)
 target_include_directories(
     ${PROJECT_NAME}
     PUBLIC $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
-           $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
+           $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/export>
            $<INSTALL_INTERFACE:include>
 )
 
@@ -171,7 +173,7 @@ if(${PROJECT_NAME}_INSTALL)
 
     install(
         FILES
-            ${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}_export.h
+            ${CMAKE_CURRENT_BINARY_DIR}/export/${PROJECT_NAME_LOWERCASE}/export.h
             ${CMAKE_CURRENT_BINARY_DIR}/include/${PROJECT_NAME_LOWERCASE}/version.h
         DESTINATION include/${PROJECT_NAME_LOWERCASE}
     )
