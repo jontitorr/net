@@ -168,6 +168,7 @@ namespace http {
     std::string_view url, const std::string& body);
 [[nodiscard]] NET_EXPORT Result<HttpResponse> put(
     std::string_view url, const std::string& body);
+// TODO: Implement these or perhaps remove them.
 [[nodiscard]] NET_EXPORT Result<HttpResponse> del(std::string_view url);
 [[nodiscard]] NET_EXPORT Result<HttpResponse> head(std::string_view url);
 [[nodiscard]] NET_EXPORT Result<HttpResponse> options(std::string_view url);
@@ -175,6 +176,12 @@ namespace http {
 [[nodiscard]] NET_EXPORT Result<HttpResponse> trace(std::string_view url);
 [[nodiscard]] NET_EXPORT Result<HttpResponse> patch(
     std::string_view url, std::string_view body);
+// Alias for HttpConnection::send_request().
+[[nodiscard]] NET_EXPORT inline Result<HttpResponse> request(
+    std::string_view url, const HttpRequest& req)
+{
+    return HttpConnection::send_request(url, req);
+}
 
 [[nodiscard]] NET_EXPORT constexpr std::string_view status_message(
     HttpStatus status);

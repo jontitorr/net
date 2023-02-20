@@ -647,49 +647,19 @@ Result<HttpResponse> HttpConnection::send_request(
             std::make_error_code(std::errc::invalid_argument));
     }
 
-    auto uri = Uri::parse(std::string { url } + req.path);
-
-    if (uri.scheme.empty()
-        || (!iequals(uri.scheme, "http") && !iequals(uri.scheme, "https"))) {
-        return tl::make_unexpected(
-            std::make_error_code(std::errc::invalid_argument));
-    }
-
-    if (!uri.port) {
-        uri.port
-            = iequals(uri.scheme, "http") ? uint16_t { 80 } : uint16_t { 443 };
-    }
-
-    auto addr = lookup_address(uri.host, *uri.port);
-
-    if (!addr) {
-        return tl::make_unexpected(addr.error());
-    }
-
-    auto conn = TcpStream::connect(*addr);
+    const auto conn = HttpConnection::connect(url);
 
     if (!conn) {
         return tl::make_unexpected(conn.error());
     }
 
-    if (!iequals(uri.scheme, "https")) {
-        return send_http_request(*conn, uri, req, false);
-    }
+    const auto uri = Uri::parse(std::string { url } + req.path);
 
-    // If the scheme is https, we need to upgrade the connection to TLS.
-    auto ssl = SslProvider::create(SslMethod::TlsClient);
-
-    if (!ssl) {
-        return tl::make_unexpected(ssl.error());
-    }
-
-    auto ssl_stream = ssl->connect(std::move(*conn));
-
-    if (!ssl_stream) {
-        return tl::make_unexpected(ssl_stream.error());
-    }
-
-    return send_http_request(*ssl_stream, uri, req, false);
+    return std::visit(
+        [&uri, &req](const auto& stream) {
+            return send_http_request(stream, uri, req, true);
+        },
+        conn->m_inner);
 }
 
 Result<void> HttpConnection::respond(const HttpResponse& res) const
