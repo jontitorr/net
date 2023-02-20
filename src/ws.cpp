@@ -246,7 +246,7 @@ Result<void> WebSocketClient::run()
     return {};
 }
 
-Result<void> WebSocketClient::connect() const
+Result<void> WebSocketClient::connect()
 {
     if (const auto state = m_state->state.load();
         state == WebSocketState::Connecting || state == WebSocketState::Open) {
@@ -254,19 +254,27 @@ Result<void> WebSocketClient::connect() const
             std::make_error_code(std::errc::already_connected));
     }
 
+    auto conn = HttpConnection::connect(m_uri.to_string());
+
+    if (!conn) {
+        return tl::make_unexpected(conn.error());
+    }
+
+    m_http_connection.emplace(std::move(*conn));
+
     const auto key = generate_ws_key();
     const HttpHeaders headers { { "Connection", "Upgrade" },
         { "Upgrade", "websocket" }, { "Sec-WebSocket-Version", "13" },
         { "Sec-WebSocket-Key", key } };
 
-    http_set_nonblocking(m_http_connection, false);
+    http_set_nonblocking(*m_http_connection, false);
 
-    const auto res = m_http_connection.request({ .method = HttpMethod::Get,
-        .path = m_path,
+    const auto res = m_http_connection->request({ .method = HttpMethod::Get,
+        .path = get_path_query_fragment(m_uri),
         .body = {},
         .headers = headers });
 
-    http_set_nonblocking(m_http_connection, true);
+    http_set_nonblocking(*m_http_connection, true);
 
     if (!res) {
         return tl::make_unexpected(res.error());
@@ -303,12 +311,14 @@ Result<void> WebSocketClient::connect() const
 void WebSocketClient::disconnect()
 {
     if (const auto state = m_state->state.load();
-        state != WebSocketState::Open && state != WebSocketState::Closing) {
+        (state != WebSocketState::Open && state != WebSocketState::Closing)
+        || !m_http_connection) {
         return;
     }
 
     m_state->state.store(WebSocketState::Closed);
-    m_http_connection.disconnect();
+    m_http_connection->disconnect();
+    m_http_connection.reset();
 
     {
         std::scoped_lock lk { m_state->mtx };
@@ -362,8 +372,8 @@ void WebSocketClient::heartbeat_loop()
 
 void WebSocketClient::read_loop()
 {
-    while ((m_state->state.load() != WebSocketState::Closed
-               && http_poll_socket(m_http_connection,
+    while ((m_state->state.load() != WebSocketState::Closed && m_http_connection
+               && http_poll_socket(*m_http_connection,
                    Socket::PollTimeout::Infinite, Socket::PollEvent::Read))
         || m_state->state.load() == WebSocketState::Closing) {
         // We found data to be read.
@@ -378,7 +388,7 @@ void WebSocketClient::read_loop()
 
 void WebSocketClient::poll()
 {
-    if (m_state->state.load() == WebSocketState::Closed) {
+    if (m_state->state.load() == WebSocketState::Closed || !m_http_connection) {
         return;
     }
 
@@ -388,7 +398,7 @@ void WebSocketClient::poll()
         [&buf](const auto& stream) {
             return stream.read(std::as_writable_bytes(std::span { buf }));
         },
-        m_http_connection.stream());
+        m_http_connection->stream());
 
     if (!res && res.error() != std::errc::resource_unavailable_try_again) {
         return disconnect();
@@ -424,7 +434,7 @@ void WebSocketClient::poll()
                 [&payload = frame.payload](const auto& stream) {
                     return stream.write(std::as_bytes(std::span { payload }));
                 },
-                m_http_connection.stream());
+                m_http_connection->stream());
 
             if (!res) {
                 return disconnect();
@@ -500,12 +510,12 @@ void WebSocketClient::process_data(std::vector<std::byte>& data)
 
         // If for some reason we do not have the complete header for the frame,
         // we must fetch it.
-        if (const auto res = std::visit(
+        if (m_http_connection
+            && !std::visit(
                 [&data, payload_start](const auto& stream) {
                     return read_until_size_is(stream, data, payload_start);
                 },
-                m_http_connection.stream());
-            !res) {
+                m_http_connection->stream())) {
             return disconnect();
         }
 
@@ -532,14 +542,14 @@ void WebSocketClient::process_data(std::vector<std::byte>& data)
         }
 
         // If we don't have the complete payload, we must fetch it.
-        if (const auto res = std::visit(
+        if (m_http_connection
+            && !std::visit(
                 [&data, payload_length = frame.payload_length, payload_start](
                     const auto& stream) {
                     return read_until_size_is(stream, data,
                         static_cast<size_t>(payload_start + payload_length));
                 },
-                m_http_connection.stream());
-            !res) {
+                m_http_connection->stream())) {
             return disconnect();
         }
 
@@ -693,14 +703,7 @@ Result<WebSocketClient> WebSocketClientBuilder::build() const
 
     uri.scheme = uri.scheme == "ws" ? "http" : "https";
 
-    auto http_client = HttpConnection::connect(uri.to_string());
-
-    if (!http_client) {
-        return tl::make_unexpected(http_client.error());
-    }
-
-    return WebSocketClient { std::move(*http_client),
-        get_path_query_fragment(uri), m_on_close, m_on_connect, m_on_message,
-        m_auto_reconnect };
+    return WebSocketClient { std::move(uri), m_on_close, m_on_connect,
+        m_on_message, m_auto_reconnect };
 }
 } // namespace net

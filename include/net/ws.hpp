@@ -74,21 +74,18 @@ struct WebSocketClient {
 private:
     friend struct WebSocketClientBuilder;
 
-    WebSocketClient(HttpConnection http_connection, std::string_view path,
-        const std::function<void()>& on_close,
-        const std::function<void()>& on_connect,
-        const std::function<void(WebSocketMessage)>& on_message,
-        bool auto_reconnect)
-        : m_http_connection { std::move(http_connection) }
-        , m_path { path }
-        , m_on_close { on_close }
-        , m_on_connect { on_connect }
-        , m_on_message { on_message }
+    WebSocketClient(Uri uri, std::function<void()> on_close,
+        std::function<void()> on_connect,
+        std::function<void(WebSocketMessage)> on_message, bool auto_reconnect)
+        : m_uri { std::move(uri) }
+        , m_on_close { std::move(on_close) }
+        , m_on_connect { std::move(on_connect) }
+        , m_on_message { std::move(on_message) }
     {
         m_state->auto_reconnect.store(auto_reconnect);
     }
 
-    [[nodiscard]] Result<void> connect() const;
+    [[nodiscard]] Result<void> connect();
     void disconnect();
     void heartbeat_loop();
     void read_loop();
@@ -102,8 +99,8 @@ private:
 
     Result<void> send_raw(const RawMessage& message);
 
-    HttpConnection m_http_connection;
-    std::string m_path;
+    std::optional<HttpConnection> m_http_connection;
+    Uri m_uri;
     std::function<void()> m_on_close;
     std::function<void()> m_on_connect;
     std::function<void(WebSocketMessage)> m_on_message;
