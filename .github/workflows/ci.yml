@@ -2,10 +2,16 @@ name: net CI
 on:
   push:
     paths:
-      - "**/{.github/workflows/*.yml,*.hpp,*.cpp,CMakeLists.txt}"
+      - "**ci.yml"
+      - "**.hpp"
+      - "**.cpp"
+      - "**CMakeLists.txt"
   pull_request:
     paths:
-      - "**/{.github/workflows/*.yml,*.hpp,*.cpp,CMakeLists.txt}"
+      - "**ci.yml"
+      - "**.hpp"
+      - "**.cpp"
+      - "**CMakeLists.txt"
 
 jobs:
   linux:
