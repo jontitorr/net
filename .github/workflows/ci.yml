@@ -1,0 +1,50 @@
+name: net CI
+on:
+  push:
+    paths:
+      - "**/{.github/workflows/*.yml,*.hpp,*.cpp,CMakeLists.txt}"
+  pull_request:
+    paths:
+      - "**/{.github/workflows/*.yml,*.hpp,*.cpp,CMakeLists.txt}"
+
+jobs:
+  linux:
+    name: Linux ${{matrix.cfg.arch}} (${{matrix.cfg.gcc-version}})
+    runs-on: ${{matrix.cfg.os}}
+    strategy:
+      fail-fast: false
+      matrix:
+        cfg:
+          - { arch: "amd64", os: ubuntu-22.04, gcc-version: g++-12 }
+          - { arch: "amd64", os: ubuntu-22.04, gcc-version: g++-11 }
+          - { arch: "amd64", os: ubuntu-22.04, gcc-version: g++-10 }
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Install dependencies
+        run: sudo apt update && sudo apt install -y cmake ${{ matrix.cfg.gcc-version }} libssl-dev ninja-build rpm
+
+      - name: Configure CMake
+        run: cmake -S . -B build -G Ninja
+        env:
+          CXX: ${{matrix.cfg.gcc-version}}
+
+      - name: Build
+        run: cmake --build build --config Release
+
+      - name: Package
+        run: cd build && cpack --verbose
+
+      - name: Upload Binary (DEB)
+        uses: actions/upload-artifact@v3
+        with:
+          name: "libnet - Debian Package ${{matrix.cfg.arch}}"
+          path: "${{github.workspace}}/build/*.deb"
+
+      - name: Upload Binary (RPM)
+        uses: actions/upload-artifact@v3
+        with:
+          name: "libnet - RPM Package ${{matrix.cfg.arch}}"
+          path: "${{github.workspace}}/build/*.rpm"
