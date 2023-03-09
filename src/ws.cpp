@@ -63,7 +63,7 @@ constexpr size_t MASKING_KEY_SIZE { 4 };
 
 std::array<std::byte, MASKING_KEY_SIZE> generate_masking_key()
 {
-    std::array<std::byte, MASKING_KEY_SIZE> key;
+    std::array<std::byte, MASKING_KEY_SIZE> key {};
     RAND_bytes(reinterpret_cast<unsigned char*>(key.data()),
         static_cast<int>(key.size()));
     return key;
@@ -198,13 +198,14 @@ Result<void> WebSocketClient::send(std::string_view message)
 Result<void> WebSocketClient::close(
     WebSocketCloseCode code, std::string_view reason)
 {
-    if (const auto state = m_state->state.load();
-        state == WebSocketState::Closing || state == WebSocketState::Closed) {
+    if (const auto state = m_state->connection_state.load();
+        state == ConnectionState::Disconnecting
+        || state == ConnectionState::Disconnected) {
         return tl::make_unexpected(
             std::make_error_code(std::errc::not_connected));
     }
 
-    m_state->state.store(WebSocketState::Closing);
+    m_state->connection_state.store(ConnectionState::Disconnecting);
 
     const auto reason_span = std::as_bytes(std::span(reason));
 
@@ -226,9 +227,10 @@ Result<void> WebSocketClient::run()
         }
 
         {
-            std::scoped_lock lk { m_state->mtx };
+            std::unique_lock lk { m_state->mtx };
 
             if (m_on_connect) {
+                lk.unlock();
                 m_on_connect();
             }
         }
@@ -237,7 +239,8 @@ Result<void> WebSocketClient::run()
             this };
         std::jthread read_thread { &WebSocketClient::read_loop, this };
 
-        while (m_state->state.load() != WebSocketState::Closed) {
+        while (
+            m_state->connection_state.load() != ConnectionState::Disconnected) {
             m_state->activity_flag.wait(false);
             poll();
         }
@@ -248,8 +251,9 @@ Result<void> WebSocketClient::run()
 
 Result<void> WebSocketClient::connect()
 {
-    if (const auto state = m_state->state.load();
-        state == WebSocketState::Connecting || state == WebSocketState::Open) {
+    if (const auto state = m_state->connection_state.load();
+        state == ConnectionState::Connecting
+        || state == ConnectionState::Connected) {
         return tl::make_unexpected(
             std::make_error_code(std::errc::already_connected));
     }
@@ -303,28 +307,31 @@ Result<void> WebSocketClient::connect()
             std::make_error_code(std::errc::connection_refused));
     }
 
-    m_state->state.store(WebSocketState::Open);
+    m_state->connection_state.store(ConnectionState::Connected);
 
     return {};
 }
 
 void WebSocketClient::disconnect()
 {
-    if (const auto state = m_state->state.load();
-        (state != WebSocketState::Open && state != WebSocketState::Closing)
+    if (const auto state = m_state->connection_state.load();
+        (state != ConnectionState::Connected
+            && state != ConnectionState::Disconnecting)
         || !m_http_connection) {
         return;
     }
 
-    m_state->state.store(WebSocketState::Closed);
+    m_state->connection_state.store(ConnectionState::Disconnected);
     m_http_connection->disconnect();
     m_http_connection.reset();
 
     {
-        std::scoped_lock lk { m_state->mtx };
+        std::unique_lock lk { m_state->mtx };
 
         if (m_on_close) {
+            lk.unlock();
             m_on_close();
+            lk.lock();
         }
 
         m_close_flags = {};
@@ -343,7 +350,7 @@ void WebSocketClient::disconnect()
 
 void WebSocketClient::heartbeat_loop()
 {
-    while (m_state->state.load() == WebSocketState::Open
+    while (m_state->connection_state.load() != ConnectionState::Disconnected
         && send_raw({ .opcode = WebSocketOpcode::Ping,
             .payload = std::vector<std::byte>(
                 HEARTBEAT_MESSAGE.begin(), HEARTBEAT_MESSAGE.end()) })) {
@@ -351,7 +358,7 @@ void WebSocketClient::heartbeat_loop()
         m_state->heartbeat_flag.test_and_set();
         m_state->heartbeat_flag.wait(true);
 
-        if (m_state->state.load() != WebSocketState::Open) {
+        if (m_state->connection_state.load() == ConnectionState::Disconnected) {
             break;
         }
 
@@ -360,7 +367,8 @@ void WebSocketClient::heartbeat_loop()
 
             std::unique_lock lk { m_state->heartbeat_mtx };
             m_state->cv.wait_for(lk, heartbeat_interval, [this] {
-                return m_state->state.load() != WebSocketState::Open;
+                return m_state->connection_state.load()
+                    == ConnectionState::Disconnected;
             });
         }
 
@@ -372,10 +380,19 @@ void WebSocketClient::heartbeat_loop()
 
 void WebSocketClient::read_loop()
 {
-    while ((m_state->state.load() != WebSocketState::Closed && m_http_connection
-               && http_poll_socket(*m_http_connection,
-                   Socket::PollTimeout::Infinite, Socket::PollEvent::Read))
-        || m_state->state.load() == WebSocketState::Closing) {
+    while (true) {
+        const auto state = m_state->connection_state.load();
+
+        if (!m_http_connection || state == ConnectionState::Disconnected) {
+            return;
+        }
+
+        if (state == ConnectionState::Connected
+            && !http_poll_socket(*m_http_connection,
+                Socket::PollTimeout::Infinite, Socket::PollEvent::Read)) {
+            return disconnect();
+        }
+
         // We found data to be read.
         m_state->read_flag.test_and_set();
         // Notify the main thread that we have work to do.
@@ -388,7 +405,8 @@ void WebSocketClient::read_loop()
 
 void WebSocketClient::poll()
 {
-    if (m_state->state.load() == WebSocketState::Closed || !m_http_connection) {
+    if (m_state->connection_state.load() == ConnectionState::Disconnected
+        || !m_http_connection) {
         return;
     }
 
@@ -423,7 +441,7 @@ void WebSocketClient::poll()
     }
 
     {
-        std::scoped_lock lk { m_state->mtx };
+        std::unique_lock lk { m_state->mtx };
 
         while (!m_write_queue.empty()) {
             const auto frame = std::move(m_write_queue.front());
@@ -437,6 +455,7 @@ void WebSocketClient::poll()
                 m_http_connection->stream());
 
             if (!res) {
+                lk.unlock();
                 return disconnect();
             }
 
@@ -588,9 +607,8 @@ void WebSocketClient::process_data(std::vector<std::byte>& data)
                 m_read_buffer.clear();
                 m_leftover_opcode.reset();
 
-                lk.unlock();
-
                 if (m_on_message) {
+                    lk.unlock();
                     m_on_message(std::move(message));
                 }
             }
@@ -632,8 +650,9 @@ void WebSocketClient::process_data(std::vector<std::byte>& data)
 
 Result<void> WebSocketClient::send_raw(const RawMessage& message)
 {
-    if (const auto state = m_state->state.load();
-        state != WebSocketState::Open && state != WebSocketState::Closing) {
+    if (const auto state = m_state->connection_state.load();
+        state != ConnectionState::Connected
+        && state != ConnectionState::Disconnecting) {
         return tl::make_unexpected(
             std::make_error_code(std::errc::not_connected));
     }

@@ -51,13 +51,6 @@ struct WebSocketMessage {
     std::vector<std::byte> payload;
 };
 
-enum class WebSocketState : uint8_t {
-    Connecting,
-    Open,
-    Closing,
-    Closed,
-};
-
 struct WebSocketClient {
     NET_EXPORT WebSocketClient& set_auto_reconnect(bool reconnect)
     {
@@ -74,13 +67,14 @@ struct WebSocketClient {
 private:
     friend struct WebSocketClientBuilder;
 
-    WebSocketClient(Uri uri, std::function<void()> on_close,
-        std::function<void()> on_connect,
-        std::function<void(WebSocketMessage)> on_message, bool auto_reconnect)
+    WebSocketClient(Uri uri, const std::function<void()>& on_close,
+        const std::function<void()>& on_connect,
+        const std::function<void(WebSocketMessage)>& on_message,
+        bool auto_reconnect)
         : m_uri { std::move(uri) }
-        , m_on_close { std::move(on_close) }
-        , m_on_connect { std::move(on_connect) }
-        , m_on_message { std::move(on_message) }
+        , m_on_close { on_close }
+        , m_on_connect { on_connect }
+        , m_on_message { on_message }
     {
         m_state->auto_reconnect.store(auto_reconnect);
     }
@@ -117,8 +111,17 @@ private:
 
     CloseFlags m_close_flags { 0, 0 };
 
+    enum class ConnectionState : uint8_t {
+        Connecting,
+        Connected,
+        Disconnecting,
+        Disconnected,
+    };
+
     struct State {
-        std::atomic<WebSocketState> state { WebSocketState::Closed };
+        std::atomic<ConnectionState> connection_state {
+            ConnectionState::Disconnected
+        };
         std::atomic_uint8_t missed_heartbeats;
         std::atomic_flag activity_flag;
         std::atomic_flag heartbeat_flag;

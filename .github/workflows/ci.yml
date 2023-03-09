@@ -17,7 +17,6 @@ jobs:
         cfg:
           - { arch: "amd64", os: ubuntu-22.04, gcc-version: g++-12 }
           - { arch: "amd64", os: ubuntu-22.04, gcc-version: g++-11 }
-          - { arch: "amd64", os: ubuntu-22.04, gcc-version: g++-10 }
 
     steps:
       - name: Checkout
