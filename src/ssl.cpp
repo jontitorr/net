@@ -270,8 +270,77 @@ struct Ssl {
     {
         auto* s_bio = [&stream] {
             if constexpr (std::is_same_v<S, TcpStream>) {
-                return BIO_new_socket(
-                    static_cast<int>(stream.as_raw_socket()), BIO_NOCLOSE);
+                return [&stream]() -> BIO* {
+                    static const auto* method = [] {
+                        auto* ret = BIO_meth_new(BIO_TYPE_SOCKET, "net_socket");
+                        static const auto send_no_pipe = [](BIO* b,
+                                                             const char* buf,
+                                                             int len) {
+
+#ifdef _WIN32
+                            using send_t = int;
+                            static constexpr int
+                                MSG_NOSIGNAL {}; // MSG_NOSIGNAL is not
+                            // supported on Windows.
+                            WSASetLastError(0);
+#else
+                            using send_t = size_t;
+                            errno = 0;
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wold-style-cast"
+#endif
+
+                            const int sent = static_cast<int>(::send(
+                                static_cast<int>(BIO_get_fd(b, nullptr)), buf,
+                                static_cast<send_t>(len), MSG_NOSIGNAL));
+#ifndef _WIN32
+#pragma GCC diagnostic pop
+#endif
+
+                            BIO_clear_retry_flags(b);
+
+                            if (sent <= 0 && BIO_sock_should_retry(sent)) {
+                                BIO_set_retry_write(b);
+                            }
+
+                            return sent;
+                        };
+
+                        BIO_meth_set_write(ret, send_no_pipe);
+                        BIO_meth_set_read(
+                            ret, BIO_meth_get_read(BIO_s_socket()));
+
+                        BIO_meth_set_puts(ret, [](BIO* b, const char* str) {
+                            return send_no_pipe(
+                                b, str, static_cast<int>(std::strlen(str)));
+                        });
+
+                        BIO_meth_set_gets(
+                            ret, BIO_meth_get_gets(BIO_s_socket()));
+                        BIO_meth_set_ctrl(
+                            ret, BIO_meth_get_ctrl(BIO_s_socket()));
+                        BIO_meth_set_create(
+                            ret, BIO_meth_get_create(BIO_s_socket()));
+                        BIO_meth_set_destroy(
+                            ret, BIO_meth_get_destroy(BIO_s_socket()));
+                        BIO_meth_set_callback_ctrl(
+                            ret, BIO_meth_get_callback_ctrl(BIO_s_socket()));
+
+                        return ret;
+                    }();
+
+                    auto* ret = BIO_new(method);
+
+                    if (ret == nullptr) {
+                        return nullptr;
+                    }
+
+                    BIO_set_fd(ret, static_cast<int>(stream.as_raw_socket()),
+                        BIO_NOCLOSE);
+
+                    return ret;
+                }();
             } else {
                 return BIO_new_dgram(
                     static_cast<int>(stream.as_raw_socket()), BIO_NOCLOSE);
