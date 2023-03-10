@@ -5,6 +5,7 @@
 int main()
 {
     std::atomic_bool connected {};
+    std::atomic_bool running { true };
 
     auto client
         = net::WebSocketClientBuilder {}
@@ -27,18 +28,22 @@ int main()
               .with_url("wss://gateway.discord.gg/?v=10&encoding=json")
               .build();
 
-    std::jthread t([&client, &connected] {
-        while (true) {
-            std::this_thread::sleep_for(std::chrono::seconds(5));
+    std::jthread t([&client, &connected, &running] {
+        while (running.load()) {
+            std::this_thread::sleep_for(std::chrono::seconds { 5 });
 
             if (!connected) {
                 continue;
             }
 
-            std::cout << "Sending close code 4000\n";
-            client->close(static_cast<net::WebSocketCloseCode>(4000));
+            if (client->close(static_cast<net::WebSocketCloseCode>(4000))) {
+                std::cout << "Sending close code 4000\n";
+            }
         }
     });
 
-    client->run();
+    if (const auto res = client->run(); !res) {
+        std::cout << "Error running client: " << res.error().message() << '\n';
+        running = false;
+    }
 }

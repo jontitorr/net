@@ -122,7 +122,7 @@ private:
         std::atomic<ConnectionState> connection_state {
             ConnectionState::Disconnected
         };
-        std::atomic_uint8_t missed_heartbeats;
+        std::atomic_bool missed_heartbeat;
         std::atomic_flag activity_flag;
         std::atomic_flag heartbeat_flag;
         std::atomic_flag read_flag;

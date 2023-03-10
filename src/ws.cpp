@@ -183,8 +183,12 @@ net::Result<void> read_until_size_is(
     return {};
 }
 
-constexpr std::array<std::byte, 3> HEARTBEAT_MESSAGE
-    = { std::byte { 0x9 }, std::byte { 0x0 }, std::byte { 0x0 } };
+const std::vector<std::byte>& heartbeat_message()
+{
+    static const std::vector<std::byte> ret { std::byte { 0x9 },
+        std::byte { 0x0 }, std::byte { 0x0 } };
+    return ret;
+}
 } // namespace
 
 namespace net {
@@ -350,29 +354,33 @@ void WebSocketClient::disconnect()
 
 void WebSocketClient::heartbeat_loop()
 {
-    while (m_state->connection_state.load() != ConnectionState::Disconnected
-        && send_raw({ .opcode = WebSocketOpcode::Ping,
-            .payload = std::vector<std::byte>(
-                HEARTBEAT_MESSAGE.begin(), HEARTBEAT_MESSAGE.end()) })) {
-        m_state->missed_heartbeats.fetch_add(1);
+    while (true) {
+        if (m_state->connection_state.load() == ConnectionState::Disconnected
+            || !send_raw({ .opcode = WebSocketOpcode::Ping,
+                .payload = heartbeat_message() })) {
+            return;
+        }
+
+        m_state->missed_heartbeat.store(true);
         m_state->heartbeat_flag.test_and_set();
         m_state->heartbeat_flag.wait(true);
 
         if (m_state->connection_state.load() == ConnectionState::Disconnected) {
-            break;
+            return;
         }
 
         {
             static constexpr std::chrono::seconds heartbeat_interval { 30 };
 
             std::unique_lock lk { m_state->heartbeat_mtx };
+
             m_state->cv.wait_for(lk, heartbeat_interval, [this] {
                 return m_state->connection_state.load()
                     == ConnectionState::Disconnected;
             });
         }
 
-        if (m_state->missed_heartbeats.load() >= 3) {
+        if (m_state->missed_heartbeat.load()) {
             return disconnect();
         }
     }
@@ -387,9 +395,13 @@ void WebSocketClient::read_loop()
             return;
         }
 
-        if (state == ConnectionState::Connected
-            && !http_poll_socket(*m_http_connection,
-                Socket::PollTimeout::Infinite, Socket::PollEvent::Read)) {
+        if (const auto res = http_poll_socket(
+                *m_http_connection, 100, Socket::PollEvent::Read);
+            !res) {
+            if (res.error() == std::errc::timed_out) {
+                continue;
+            }
+
             return disconnect();
         }
 
@@ -625,9 +637,8 @@ void WebSocketClient::process_data(std::vector<std::byte>& data)
             break;
         }
         case WebSocketOpcode::Pong: {
-            if (std::equal(frame.payload.begin(), frame.payload.end(),
-                    HEARTBEAT_MESSAGE.begin())) {
-                m_state->missed_heartbeats.store(0);
+            if (frame.payload == heartbeat_message()) {
+                m_state->missed_heartbeat.store(false);
             }
             break;
         }
