@@ -85,7 +85,7 @@ jobs:
         run: cmake --build build --config ${{matrix.config}} --parallel ${{steps.cpu-cores.outputs.cores}}
 
       - name: Package
-        run: cd build && cpack --verbose
+        run: cd build && cpack -C ${{matrix.config}} --verbose
 
       - name: Upload Binary
         uses: actions/upload-artifact@v3
