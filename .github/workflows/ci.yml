@@ -74,11 +74,11 @@ jobs:
         uses: seanmiddleditch/gha-setup-ninja@master
 
       - name: Configure CMake (x64)
-        if: ${{ matrix.arch == "x64" }}
+        if: ${{ matrix.arch == 'x64' }}
         run: cmake -S . -B build -G Ninja
 
       - name: Configure CMake (x86)
-        if: ${{ matrix.arch == "x86" }}
+        if: ${{ matrix.arch == 'x86' }}
         run: cmake -S . -B build -G Ninja -A Win32 -T host=x86
 
       - name: Build
