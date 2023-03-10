@@ -15,26 +15,26 @@ on:
 
 jobs:
   linux:
-    name: Linux ${{matrix.cfg.arch}} (${{matrix.cfg.gcc-version}})
-    runs-on: ${{matrix.cfg.os}}
+    name: Linux ${{matrix.arch}} (${{matrix.gcc-version}})
+    runs-on: ${{matrix.os}}
     strategy:
       fail-fast: false
       matrix:
-        cfg:
-          - { arch: "amd64", os: ubuntu-22.04, gcc-version: g++-12 }
-          - { arch: "amd64", os: ubuntu-22.04, gcc-version: g++-11 }
+        arch: [amd64]
+        gcc-version: ["g++-11", "g++-12"]
+        os: ["ubuntu-22.04"]
 
     steps:
       - name: Checkout
         uses: actions/checkout@v3
 
       - name: Install dependencies
-        run: sudo apt update && sudo apt install -y cmake ${{ matrix.cfg.gcc-version }} libssl-dev ninja-build rpm
+        run: sudo apt update && sudo apt install -y cmake ${{ matrix.gcc-version }} libssl-dev ninja-build rpm
 
       - name: Configure CMake
         run: cmake -S . -B build -G Ninja
         env:
-          CXX: ${{matrix.cfg.gcc-version}}
+          CXX: ${{matrix.gcc-version}}
 
       - name: Build
         run: cmake --build build --config Release
@@ -45,11 +45,50 @@ jobs:
       - name: Upload Binary (DEB)
         uses: actions/upload-artifact@v3
         with:
-          name: "libnet - Debian Package ${{matrix.cfg.arch}}"
+          name: "libnet - Debian Package ${{matrix.arch}}"
           path: "${{github.workspace}}/build/*.deb"
 
       - name: Upload Binary (RPM)
         uses: actions/upload-artifact@v3
         with:
-          name: "libnet - RPM Package ${{matrix.cfg.arch}}"
+          name: "libnet - RPM Package ${{matrix.arch}}"
           path: "${{github.workspace}}/build/*.rpm"
+  windows:
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [x64, x86]
+        mode: [Release, Debug]
+        os: ["windows-2019", "windows-2022"]
+
+    name: "Windows ${{matrix.arch}}-${{matrix.mode}}"
+    runs-on: ${{matrix.os}}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Add MSBuild to PATH
+        uses: microsoft/setup-msbuild@v1.1
+
+      - name: Install Ninja
+        uses: seanmiddleditch/gha-setup-ninja@master
+
+      - name: Configure CMake (x64)
+        if: ${{ matrix.arch == "x64" }}
+        run: cmake -S . -B build -G Ninja
+
+      - name: Configure CMake (x86)
+        if: ${{ matrix.arch == "x86" }}
+        run: cmake -S . -B build -G Ninja -A Win32 -T host=x86
+
+      - name: Build
+        run: cmake --build build --config ${{matrix.mode}}
+
+      - name: Package
+        run: cd build && cpack --verbose
+
+      - name: Upload Binary
+        uses: actions/upload-artifact@v3
+        with:
+          name: "libnet - Windows ${{matrix.arch}}-${{matrix.mode}}"
+          path: "${{github.workspace}}/build/*.zip"
