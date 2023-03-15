@@ -601,6 +601,7 @@ Result<HttpConnection> HttpConnection::connect(std::string_view url)
             = iequals(uri.scheme, "http") ? uint16_t { 80 } : uint16_t { 443 };
     }
 
+    // TODO: Make lookup_address the third method of parsing for SocketAddr.
     auto addr = lookup_address(uri.host, *uri.port);
 
     if (!addr) {
@@ -624,7 +625,7 @@ Result<HttpConnection> HttpConnection::connect(std::string_view url)
         return tl::make_unexpected(ssl.error());
     }
 
-    auto ssl_stream = ssl->connect(std::move(*conn));
+    auto ssl_stream = ssl->connect(uri.host, std::move(*conn));
 
     if (!ssl_stream) {
         return tl::make_unexpected(ssl_stream.error());

@@ -15,6 +15,7 @@
 #include <openssl/err.h>
 #include <openssl/rand.h>
 #include <openssl/ssl.h>
+#include <openssl/x509v3.h>
 
 #ifndef _WIN32
 #pragma GCC diagnostic pop
@@ -84,6 +85,46 @@ const std::array<unsigned char, COOKIE_SECRET_LENGTH>& cookie_secret()
     }();
     return ret;
 }
+
+#ifdef _WIN32
+net::Result<void> load_windows_certificates(const SSL_CTX* ssl)
+{
+    DWORD flags = CERT_STORE_READONLY_FLAG | CERT_STORE_OPEN_EXISTING_FLAG
+        | CERT_SYSTEM_STORE_CURRENT_USER;
+    auto* system_store
+        = CertOpenStore(CERT_STORE_PROV_SYSTEM, 0, 0, flags, L"Root");
+
+    if (system_store == nullptr) {
+        return tl::make_unexpected(std::error_code {
+            static_cast<int>(GetLastError()), std::system_category() });
+    }
+
+    PCCERT_CONTEXT it {};
+    auto* ssl_store = SSL_CTX_get_cert_store(ssl);
+
+    uint32_t count {};
+    while ((it = CertEnumCertificatesInStore(system_store, it)) != nullptr) {
+        auto* x509 = d2i_X509(nullptr,
+            const_cast<const unsigned char**>(&it->pbCertEncoded),
+            static_cast<int32_t>(it->cbCertEncoded));
+        if (x509 != nullptr) {
+            if (X509_STORE_add_cert(ssl_store, x509) == 1) {
+                ++count;
+            }
+            X509_free(x509);
+        }
+    }
+
+    CertFreeCertificateContext(it);
+    CertCloseStore(system_store, 0);
+
+    if (count == 0) {
+        return tl::make_unexpected(std::make_error_code(std::errc::io_error));
+    }
+
+    return {};
+}
+#endif
 
 int vs_dtls_generate_cookie(
     SSL* ssl, unsigned char* cookie, unsigned int* cookie_len)
@@ -235,6 +276,24 @@ struct SslContext {
                 return static_cast<SSL_CTX*>(nullptr);
             }
         }();
+
+        // This seems like a good default.
+        SSL_CTX_set_cipher_list(ctx,
+            "DEFAULT:!aNULL:!eNULL:!MD5:!3DES:!DES:!RC4:!IDEA:!SEED:!aDSS:!SRP:"
+            "!PSK");
+        SSL_CTX_set_options(ctx,
+            SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3 | SSL_OP_NO_TLSv1
+                | SSL_OP_NO_TLSv1_1);
+
+        if (![ctx] {
+#ifdef _WIN32
+                return load_windows_certificates(ctx);
+#else
+        return SSL_CTX_set_default_verify_paths(ctx) == 1;
+#endif
+            }()) {
+            return tl::make_unexpected(get_openssl_error());
+        }
 
         // If our method is DTLS, we need to set cookie callbacks.
         if (method == SslMethod::Dtls || method == SslMethod::DtlsClient
@@ -408,6 +467,46 @@ struct Ssl {
         return BIO_do_connect(m_ssl.get()) == 1
             ? net::Result<void> {}
             : tl::make_unexpected(get_openssl_error());
+    }
+
+    [[nodiscard]] net::Result<void> set_hostname(std::string_view host) const
+    {
+#ifndef _WIN32
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wold-style-cast"
+#endif
+        if (SSL_set_tlsext_host_name(as_ssl(), host.data()) != 1) {
+            return tl::make_unexpected(get_openssl_error());
+        }
+#ifndef _WIN32
+#pragma GCC diagnostic pop
+#endif
+
+        return {};
+    }
+
+    [[nodiscard]] net::Result<void> verify_hostname(std::string_view host) const
+    {
+#if OPENSSL_VERSION_NUMBER >= 0x10100000L
+        SSL_set_hostflags(as_ssl(), X509_CHECK_FLAG_NO_PARTIAL_WILDCARDS);
+
+        if (SSL_set1_host(as_ssl(), host.data()) != 1) {
+            return tl::make_unexpected(get_openssl_error());
+        }
+#else
+        auto* param = SSL_get0_param(as_ssl());
+
+        X509_VERIFY_PARAM_set_hostflags(
+            param, X509_CHECK_FLAG_NO_PARTIAL_WILDCARDS);
+
+        if (X509_VERIFY_PARAM_set1_host(param, host.data(), host.size()) == 0) {
+            return tl::make_unexpected(get_openssl_error());
+        }
+#endif
+
+        SSL_set_verify(as_ssl(), SSL_VERIFY_PEER, nullptr);
+
+        return {};
     }
 
 private:
@@ -657,10 +756,10 @@ Result<SslProvider> SslProvider::create(SslMethod method)
         return tl::make_unexpected(ctx.error());
     }
 
-    SslProvider acceptor;
-    acceptor.m_impl = std::make_unique<Impl>(*ctx);
+    SslProvider provider;
+    provider.m_impl = std::make_unique<Impl>(*ctx);
 
-    return acceptor;
+    return provider;
 }
 
 Result<void> SslProvider::set_certificate_file(
@@ -760,11 +859,13 @@ template<Stream S> Result<SslStream<S>> SslProvider::accept(S stream) const
     return ssl_stream;
 }
 
-template<Stream S> Result<SslStream<S>> SslProvider::connect(S stream) const
+template<Stream S> Result<SslStream<S>> SslProvider::connect(
+    std::optional<std::string_view> host, S stream) const
 {
     auto ssl = Ssl::create(m_impl->m_ctx, stream, true);
 
-    if (!ssl) {
+    if (!ssl || (m_sni && !ssl->set_hostname(host.value_or("")))
+        || (m_verify_hostname && !ssl->verify_hostname(host.value_or("")))) {
         return tl::make_unexpected(SslError::Ssl);
     }
 
@@ -786,7 +887,7 @@ template NET_EXPORT Result<SslStream<TcpStream>> SslProvider::accept(
 template NET_EXPORT Result<SslStream<UdpSocket>> SslProvider::accept(
     UdpSocket) const;
 template NET_EXPORT Result<SslStream<TcpStream>> SslProvider::connect(
-    TcpStream) const;
+    std::optional<std::string_view>, TcpStream) const;
 template NET_EXPORT Result<SslStream<UdpSocket>> SslProvider::connect(
-    UdpSocket) const;
+    std::optional<std::string_view>, UdpSocket) const;
 } // namespace net

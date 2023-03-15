@@ -54,7 +54,8 @@ int main()
             return print_error_code(client.error());
         }
 
-        auto ssl_stream = client_acceptor.connect(std::move(*client));
+        auto ssl_stream
+            = client_acceptor.connect("YOUR_HOST", std::move(*client));
 
         if (!ssl_stream) {
             return 1;

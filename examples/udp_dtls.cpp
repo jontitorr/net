@@ -44,7 +44,8 @@ int main()
 
         std::cout << "(Client) RAW Connected to server.\n";
 
-        auto ssl_stream = client_connector.connect(std::move(*client));
+        auto ssl_stream
+            = client_connector.connect("YOUR_HOST", std::move(*client));
 
         if (!ssl_stream) {
             std::cout << "(Client) Failed to SSL connect to server.\n";

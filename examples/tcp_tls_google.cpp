@@ -24,8 +24,8 @@ int main()
         return print_error_code(client.error());
     }
 
-    auto ssl_stream
-        = SslProvider::create(SslMethod::Tls)->connect(std::move(*client));
+    auto ssl_stream = SslProvider::create(SslMethod::Tls)
+                          ->connect("google.com", std::move(*client));
 
     if (!ssl_stream) {
         return print_error_code(ssl_stream.error());

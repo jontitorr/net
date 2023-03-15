@@ -118,6 +118,22 @@ struct SslProvider {
 
     NET_EXPORT static Result<SslProvider> create(SslMethod method);
 
+    [[nodiscard]] NET_EXPORT SslProvider& set_sni(bool sni)
+    {
+        m_sni = sni;
+        return *this;
+    }
+
+    [[nodiscard]] NET_EXPORT SslProvider& set_verify_hostname(
+        bool verify_hostname)
+    {
+        m_verify_hostname = verify_hostname;
+        return *this;
+    }
+
+    // TODO: Maybe split this into two separate classes for two different use
+    // cases like client and server.
+
     [[nodiscard]] NET_EXPORT Result<void> set_certificate_file(
         const std::string& file, SslFileType type) const;
     [[nodiscard]] NET_EXPORT Result<void> set_certificate_chain_file(
@@ -127,13 +143,15 @@ struct SslProvider {
 
     template<Stream S>
     [[nodiscard]] NET_EXPORT Result<SslStream<S>> accept(S stream) const;
-    template<Stream S>
-    [[nodiscard]] NET_EXPORT Result<SslStream<S>> connect(S stream) const;
+    template<Stream S> [[nodiscard]] NET_EXPORT Result<SslStream<S>> connect(
+        std::optional<std::string_view> host, S stream) const;
 
 private:
     SslProvider() = default;
 
     struct Impl;
     std::unique_ptr<Impl> m_impl;
+    bool m_sni { true };
+    bool m_verify_hostname { true };
 };
 } // namespace net
