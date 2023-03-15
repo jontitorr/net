@@ -228,7 +228,7 @@ Result<HttpResponse> receive_http_response(auto& stream)
     auto status_line = split(
         std::string_view { response_str }.substr(0, end_of_status), " ");
 
-    if (!is_number(status_line[1])) {
+    if (status_line.size() < 3 || !is_number(status_line[1])) {
         return tl::make_unexpected(
             std::make_error_code(std::errc::invalid_argument));
     }
