@@ -32,6 +32,11 @@ struct Uri {
      * @return Result<Uri> The parsed URI object.
      */
     [[nodiscard]] NET_EXPORT static Uri parse(std::string_view uri);
+    [[nodiscard]] NET_EXPORT static std::string url_encode(
+        std::string_view str);
+    [[nodiscard]] NET_EXPORT static std::string url_decode(
+        std::string_view str);
+
     [[nodiscard]] NET_EXPORT std::string to_string() const;
 
     std::string scheme {};

@@ -219,6 +219,73 @@ Uri Uri::parse(std::string_view uri_str)
     return uri;
 }
 
+std::string Uri::url_encode(std::string_view str)
+{
+    std::string ret;
+    constexpr char hex_chars[] = "0123456789ABCDEF"; // NOLINT
+
+    for (const auto& c : str) {
+        const auto uc = static_cast<unsigned char>(c);
+
+        if ((std::isalnum(uc) != 0) || c == '-' || c == '_' || c == '.'
+            || c == '~') {
+            ret += c;
+            continue;
+        }
+
+        ret += '%';
+        ret += hex_chars[(uc >> 4) // NOLINT
+            & 0xF]; // NOLINT
+        ret += hex_chars[uc & 0xF]; // NOLINT
+    }
+
+    return ret;
+}
+
+std::string Uri::url_decode(std::string_view str)
+{
+    std::string ret;
+    char ch {};
+    int ii {};
+
+    for (size_t i {}; i < str.length(); ++i) {
+        if (str[i] != '%') {
+            ret += str[i] == '+' ? ' ' : str[i];
+            continue;
+        }
+
+        if (i + 2 >= str.length()) {
+            ret += '%';
+            continue;
+        }
+
+        ii = 0;
+
+        for (int j = 0; j < 2; ++j) {
+            ch = str[++i];
+            ii *= 16; // NOLINT
+
+            if (ch >= '0' && ch <= '9') {
+                ii += ch - '0';
+            } else if (ch >= 'A' && ch <= 'F') {
+                ii += ch - 'A' + 10; // NOLINT
+            } else if (ch >= 'a' && ch <= 'f') {
+                ii += ch - 'a' + 10; // NOLINT
+            } else {
+                ret += '%';
+                ret += ch;
+                break;
+            }
+        }
+
+        if (ii > 0) {
+            ret += static_cast<char>(ii);
+        }
+    }
+
+    return ret;
+}
+
 std::string Uri::to_string() const
 {
     std::string ret {};
