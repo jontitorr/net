@@ -116,7 +116,7 @@ std::vector<std::string> split(std::string_view s, std::string_view delimiter)
     return ret;
 }
 
-bool is_number(std::string_view s)
+inline bool is_number(std::string_view s)
 {
     return std::all_of(
         s.begin(), s.end(), [](unsigned char c) { return std::isdigit(c); });
@@ -708,19 +708,70 @@ Result<HttpResponse> get(std::string_view url, const HttpHeaders& headers)
             .headers = headers });
 }
 
-Result<HttpResponse> post(std::string_view url, const std::string& body)
+Result<HttpResponse> post(std::string_view url, std::string_view body)
 {
     return HttpConnection::send_request(url,
         { .method = HttpMethod::Post,
             .path = {},
-            .body = body,
+            .body = std::string { body },
             .headers = {} });
 }
 
-Result<HttpResponse> put(std::string_view url, const std::string& body)
+Result<HttpResponse> put(std::string_view url, std::string_view body)
 {
     return HttpConnection::send_request(url,
-        { .method = HttpMethod::Put, .path = {}, .body = body, .headers = {} });
+        { .method = HttpMethod::Put,
+            .path = {},
+            .body = std::string { body },
+            .headers = {} });
+}
+
+Result<HttpResponse> del(std::string_view url)
+{
+    return HttpConnection::send_request(url,
+        { .method = HttpMethod::Delete,
+            .path = {},
+            .body = {},
+            .headers = {} });
+}
+
+Result<HttpResponse> head(std::string_view url)
+{
+    return HttpConnection::send_request(url,
+        { .method = HttpMethod::Head, .path = {}, .body = {}, .headers = {} });
+}
+
+Result<HttpResponse> options(std::string_view url)
+{
+    return HttpConnection::send_request(url,
+        { .method = HttpMethod::Options,
+            .path = {},
+            .body = {},
+            .headers = {} });
+}
+
+Result<HttpResponse> connect(std::string_view url)
+{
+    return HttpConnection::send_request(url,
+        { .method = HttpMethod::Connect,
+            .path = {},
+            .body = {},
+            .headers = {} });
+}
+
+Result<HttpResponse> trace(std::string_view url)
+{
+    return HttpConnection::send_request(url,
+        { .method = HttpMethod::Trace, .path = {}, .body = {}, .headers = {} });
+}
+
+Result<HttpResponse> patch(std::string_view url, const std::string& body)
+{
+    return HttpConnection::send_request(url,
+        { .method = HttpMethod::Patch,
+            .path = {},
+            .body = body,
+            .headers = {} });
 }
 
 constexpr std::string_view status_message(HttpStatus status)
@@ -817,6 +868,23 @@ Result<HttpServer> HttpServer::bind(SocketAddr addr)
     }
 
     return HttpServer { std::move(*listener) };
+}
+
+void HttpServer::add_route(
+    HttpMethod method, std::string_view path, const RouteHandler& handler)
+{
+    if (path.empty() || !handler) {
+        return;
+    }
+
+    auto parts
+        = path == "/" ? std::vector<std::string> { "/" } : split(path, "/");
+
+    if (parts.size() > 1) {
+        parts.erase(parts.begin());
+    }
+
+    m_routes[method].emplace_back(Route { std::move(parts), handler });
 }
 
 Result<void> HttpServer::run() const
@@ -953,36 +1021,90 @@ Result<std::pair<HttpRequest, HttpConnection>> HttpServer::accept() const
 }
 
 Result<void> HttpServer::handle_request(
-    const net::HttpConnection& conn, const HttpRequest& req) const
+    const net::HttpConnection& conn, HttpRequest& req) const
 {
-    const auto path = Uri::parse(req.path).path;
+    const net::HttpResponse not_found { .status_code = HttpStatus::NotFound,
+        .status_message = {},
+        .body = {},
+        .headers = { { "Connection", "close" } } };
 
-    if (!m_routes.contains(req.method)
-        || !m_routes.at(req.method).contains(path)) {
-        if (const auto res = conn.respond({ .status_code = HttpStatus::NotFound,
-                .status_message = {},
-                .body = {},
-                .headers = { { "Connection", "close" } } });
-            !res) {
+    if (!m_routes.contains(req.method)) {
+        if (const auto res = conn.respond(not_found); !res) {
             return tl::make_unexpected(res.error());
-        };
+        }
 
         return tl::make_unexpected(
             std::make_error_code(std::errc::connection_reset));
     }
 
-    const auto response = m_routes.at(req.method).at(path)(req);
+    const auto req_parts = [&req] {
+        const auto resolved_path = Uri::url_decode(req.path);
+        auto parts = resolved_path == "/"
+            ? std::vector<std::string> { "/" }
+            : split(Uri::parse(resolved_path).path, "/");
 
-    if (const auto res = conn.respond(response); !res) {
+        if (parts.size() > 1) {
+            parts.erase(parts.begin());
+        }
+
+        return parts;
+    }();
+
+    for (const auto& route : m_routes.at(req.method)) {
+        const auto& route_parts = route.parts;
+
+        if (route_parts.size() != req_parts.size()) {
+            continue;
+        }
+
+        bool match { true };
+        std::unordered_map<std::string, std::string> params {};
+
+        for (size_t i {}; i < route_parts.size(); ++i) {
+            const auto& route_part = route_parts.at(i);
+            const auto& req_part = req_parts.at(i);
+
+            if (route_part.front() == '{' && route_part.back() == '}') {
+                params.insert_or_assign(
+                    route_part.substr(1, route_part.size() - 2), req_part);
+            } else if (route_part != req_part) {
+                match = false;
+                break;
+            }
+        }
+
+        if (!match) {
+            continue;
+        }
+
+        const ServerHttpRequest server_req {
+            .method = req.method,
+            .path = std::move(req.path),
+            .params = std::move(params),
+            .body = std::move(req.body),
+            .headers = std::move(req.headers),
+        };
+
+        const auto response = route.handler(server_req);
+
+        if (const auto res = conn.respond(response); !res) {
+            return tl::make_unexpected(res.error());
+        }
+
+        if (response.headers.contains("Connection")
+            && response.headers.at("Connection") == "close") {
+            return tl::make_unexpected(
+                std::make_error_code(std::errc::connection_reset));
+        }
+
+        return {};
+    }
+
+    if (const auto res = conn.respond(not_found); !res) {
         return tl::make_unexpected(res.error());
     }
 
-    if (response.headers.contains("Connection")
-        && response.headers.at("Connection") == "close") {
-        return tl::make_unexpected(
-            std::make_error_code(std::errc::connection_reset));
-    }
-
-    return {};
+    return tl::make_unexpected(
+        std::make_error_code(std::errc::connection_reset));
 }
 } // namespace net

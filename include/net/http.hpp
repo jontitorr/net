@@ -165,10 +165,9 @@ namespace http {
 [[nodiscard]] NET_EXPORT Result<HttpResponse> get(
     std::string_view url, const HttpHeaders& headers);
 [[nodiscard]] NET_EXPORT Result<HttpResponse> post(
-    std::string_view url, const std::string& body);
+    std::string_view url, std::string_view body);
 [[nodiscard]] NET_EXPORT Result<HttpResponse> put(
-    std::string_view url, const std::string& body);
-// TODO: Implement these or perhaps remove them.
+    std::string_view url, std::string_view body);
 [[nodiscard]] NET_EXPORT Result<HttpResponse> del(std::string_view url);
 [[nodiscard]] NET_EXPORT Result<HttpResponse> head(std::string_view url);
 [[nodiscard]] NET_EXPORT Result<HttpResponse> options(std::string_view url);
@@ -176,6 +175,7 @@ namespace http {
 [[nodiscard]] NET_EXPORT Result<HttpResponse> trace(std::string_view url);
 [[nodiscard]] NET_EXPORT Result<HttpResponse> patch(
     std::string_view url, std::string_view body);
+
 // Alias for HttpConnection::send_request().
 [[nodiscard]] NET_EXPORT inline Result<HttpResponse> request(
     std::string_view url, const HttpRequest& req)
@@ -187,8 +187,16 @@ namespace http {
     HttpStatus status);
 } // namespace http
 
+struct ServerHttpRequest {
+    HttpMethod method;
+    std::string path;
+    std::unordered_map<std::string, std::string> params;
+    std::string body;
+    HttpHeaders headers;
+};
+
 struct HttpServer {
-    using RouteHandler = std::function<HttpResponse(const HttpRequest&)>;
+    using RouteHandler = std::function<HttpResponse(const ServerHttpRequest&)>;
 
     [[nodiscard]] NET_EXPORT static Result<HttpServer> bind(SocketAddr addr);
 
@@ -198,10 +206,7 @@ struct HttpServer {
     }
 
     NET_EXPORT void add_route(
-        HttpMethod method, const std::string& path, const RouteHandler& handler)
-    {
-        m_routes[method][path] = handler;
-    }
+        HttpMethod method, std::string_view path, const RouteHandler& handler);
 
     // TODO: Add support for path parameters.
 
@@ -211,7 +216,7 @@ private:
     [[nodiscard]] Result<std::pair<HttpRequest, HttpConnection>> accept() const;
 
     [[nodiscard]] Result<void> handle_request(
-        const net::HttpConnection& conn, const HttpRequest& req) const;
+        const net::HttpConnection& conn, HttpRequest& req) const;
 
     explicit HttpServer(TcpListener inner)
         : m_inner { std::move(inner) }
@@ -219,9 +224,13 @@ private:
     }
 
     TcpListener m_inner;
-    std::unordered_map<HttpMethod,
-        std::unordered_map<std::string, RouteHandler>>
-        m_routes;
+
+    struct Route {
+        std::vector<std::string> parts;
+        RouteHandler handler;
+    };
+
+    std::unordered_map<HttpMethod, std::vector<Route>> m_routes;
     bool m_running { true };
 };
 } // namespace net

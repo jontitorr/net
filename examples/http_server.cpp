@@ -3,10 +3,10 @@
 #include <net/http.hpp>
 
 using net::HttpMethod;
-using net::HttpRequest;
 using net::HttpResponse;
 using net::HttpServer;
 using net::HttpStatus;
+using net::ServerHttpRequest;
 using net::SocketAddr;
 using net::Uri;
 
@@ -36,48 +36,76 @@ int main()
         return 1;
     }
 
-    server->add_route(HttpMethod::Get, "/",
-        [body = open_file("index.html")](const HttpRequest& req) {
-            const auto connection = req.headers.contains("Connection")
-                ? req.headers.at("Connection")
-                : "close";
+    server->add_route(HttpMethod::Get, "/", [](const ServerHttpRequest& req) {
+        const auto connection = req.headers.contains("Connection")
+            ? req.headers.at("Connection")
+            : "close";
 
-            return HttpResponse {
+        return HttpResponse {
             .status_code = HttpStatus::Ok,
             .status_message = "OK",
-            .body = body,
+            .body = "<!DOCTYPE html><html><head><title>Hello, world!</title></head><body><h1>Hello, world!</h1></body></html>",
             .headers = {
                 { "Content-Type", "text/html" },
                 {"Connection", connection},
             },
         };
-        });
-
-    server->add_route(HttpMethod::Get, "/hello", [](const HttpRequest& req) {
-        HttpResponse res;
-        res.headers = {
-            { "Content-Type", "text/plain" },
-        };
-
-        const auto query = Uri::parse(req.path).query;
-
-        if (!query.contains("name")) {
-            res.status_code = HttpStatus::BadRequest;
-            res.status_message = "Bad Request";
-            res.body = "Missing 'name' query parameter";
-            return res;
-        }
-
-        const auto name = query.at("name");
-
-        res.status_code = HttpStatus::Ok;
-        res.status_message = "OK";
-        res.body = "Hello, " + name + "!";
-        return res;
     });
 
-    server->add_route(HttpMethod::Post, "/hello", [](const HttpRequest& req) {
-        return HttpResponse {
+    server->add_route(
+        HttpMethod::Get, "/hello", [](const ServerHttpRequest& req) {
+            HttpResponse res;
+            res.headers = {
+                { "Content-Type", "text/plain" },
+            };
+
+            const auto query = Uri::parse(req.path).query;
+
+            if (!query.contains("name")) {
+                res.status_code = HttpStatus::BadRequest;
+                res.status_message = "Bad Request";
+                res.body = "Missing 'name' query parameter";
+                return res;
+            }
+
+            const auto name = query.at("name");
+
+            res.status_code = HttpStatus::Ok;
+            res.status_message = "OK";
+            res.body = "Hello, " + name + "!";
+            return res;
+        });
+
+    server->add_route(HttpMethod::Get, "/hello/{waifu_name}",
+        [](const ServerHttpRequest& req) {
+            HttpResponse res;
+            res.headers = {
+                { "Content-Type", "text/plain" },
+            };
+
+            const auto& waifu_name = req.params.at("waifu_name");
+            const auto waifu_res
+                = net::http::get("https://api.jikan.moe/v4/anime?sfw&q="
+                    + Uri::url_encode(waifu_name));
+
+            if (!waifu_res) {
+                res.status_code = HttpStatus::InternalServerError;
+                res.status_message = "Internal Server Error";
+                res.body = "Failed to fetch waifu";
+                return res;
+            }
+
+            const auto& data = waifu_res->body;
+
+            res.status_code = HttpStatus::Ok;
+            res.status_message = "OK";
+            res.body = data;
+            return res;
+        });
+
+    server->add_route(
+        HttpMethod::Post, "/hello", [](const ServerHttpRequest& req) {
+            return HttpResponse {
             .status_code = HttpStatus::Ok,
             .status_message = "OK",
             .body = "Hello, " + req.body + "!",
@@ -85,7 +113,7 @@ int main()
                 { "Content-Type", "text/plain" },
             },
         };
-    });
+        });
 
     (void)server->run();
 }
