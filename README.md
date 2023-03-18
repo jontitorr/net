@@ -13,7 +13,7 @@ A small network library written for use in C++ applications.
 ### Prerequisites
 
 - [CMake](https://cmake.org/download/) (version >= 3.15)
-- Compiler with C++20 support, i.e. MSVC, GCC, Clang
+- Compiler with C++17 support, i.e. MSVC, GCC, Clang
 
 ### Installing
 
@@ -43,6 +43,7 @@ See [examples](https://github.com/Xminent/net/tree/main/examples).
 
 - [expected](https://github.com/TartanLlama/expected) (comes bundled with project)
 - [OpenSSL](https://openssl.org/) (comes bundled with project, unless you have it installed)
+- [span](https://github.com/tcbrindle/span) (comes bundled with project)
 
 ## License
 
