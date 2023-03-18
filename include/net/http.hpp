@@ -123,7 +123,9 @@ struct HttpConnection {
     NET_EXPORT void disconnect() const
     {
         return std::visit(
-            []<typename Stream>(const Stream& stream) {
+            [](const auto& stream) {
+                using Stream = std::decay_t<decltype(stream)>;
+
                 if constexpr (std::is_same_v<Stream, TcpStream>) {
                     (void)stream.shutdown(Socket::Shutdown::Both);
                 } else {
@@ -139,7 +141,9 @@ private:
     [[nodiscard]] RawSocket as_raw_socket() const
     {
         return std::visit(
-            []<typename Stream>(const Stream& stream) {
+            [](const auto& stream) {
+                using Stream = std::decay_t<decltype(stream)>;
+
                 if constexpr (std::is_same_v<Stream, TcpStream>) {
                     return stream.as_raw_socket();
                 } else {

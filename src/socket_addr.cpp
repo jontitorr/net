@@ -1,5 +1,5 @@
+#include <limits>
 #include <net/socket_addr.hpp>
-#include <numeric>
 #include <string>
 
 namespace {
@@ -33,7 +33,7 @@ net::Result<net::SocketAddrV4> parse_socket_addrv4(std::string_view str)
 
 net::Result<net::SocketAddrV6> parse_socket_addrv6(std::string_view str)
 {
-    if (!str.starts_with('[')) {
+    if (str.length() >= 1 && str.front() == '[') {
         return tl::make_unexpected(
             std::make_error_code(std::errc::invalid_argument));
     }

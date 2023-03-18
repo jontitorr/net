@@ -28,10 +28,6 @@ int main()
         std::cout << "Body: " << res->body << '\n';
     };
 
-    do_request(
-        { .method = HttpMethod::Get, .path = "/", .body = {}, .headers = {} });
-    do_request({ .method = HttpMethod::Get,
-        .path = "/search",
-        .body = {},
-        .headers = {} });
+    do_request({ HttpMethod::Get, "/", {}, {} });
+    do_request({ HttpMethod::Get, "/search", {}, {} });
 }

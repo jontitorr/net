@@ -33,26 +33,25 @@ const std::error_category& ssl_error_category() noexcept;
 inline std::ostream& operator<<(std::ostream& os, SslError error)
 {
     switch (error) {
-        using enum net::SslError;
-    case None:
+    case net::SslError::None:
         return os << "None";
-    case ZeroReturn:
+    case net::SslError::ZeroReturn:
         return os << "ZeroReturn";
-    case WantRead:
+    case net::SslError::WantRead:
         return os << "WantRead";
-    case WantWrite:
+    case net::SslError::WantWrite:
         return os << "WantWrite";
-    case WantConnect:
+    case net::SslError::WantConnect:
         return os << "WantConnect";
-    case WantAccept:
+    case net::SslError::WantAccept:
         return os << "WantAccept";
-    case WantX509Lookup:
+    case net::SslError::WantX509Lookup:
         return os << "WantX509Lookup";
-    case Syscall:
+    case net::SslError::Syscall:
         return os << "Syscall";
-    case Ssl:
+    case net::SslError::Ssl:
         return os << "Ssl";
-    case Unknown:
+    case net::SslError::Unknown:
         return os << "Unknown";
     default:
         return os << "Invalid SslError value";
@@ -73,10 +72,11 @@ enum class SslMethod : uint8_t {
     DtlsServer
 };
 
-template<typename T>
-concept Stream = std::is_same_v<T, TcpStream> || std::is_same_v<T, UdpSocket>;
+template<typename Stream> struct SslStream {
+    static_assert(
+        std::is_same_v<Stream, TcpStream> || std::is_same_v<Stream, UdpSocket>,
+        "SslStream can only be used with TcpStream or UdpStream");
 
-template<Stream S> struct SslStream {
     SslStream(const SslStream&) = delete;
     SslStream& operator=(const SslStream&) = delete;
     NET_EXPORT SslStream(SslStream&&) noexcept;
@@ -86,9 +86,9 @@ template<Stream S> struct SslStream {
     [[nodiscard]] NET_EXPORT const Socket& socket() const;
 
     [[nodiscard]] NET_EXPORT Result<size_t> read(
-        std::span<std::byte> buf) const;
+        tcb::span<std::byte> buf) const;
     [[nodiscard]] NET_EXPORT Result<size_t> write(
-        std::span<const std::byte> buf) const;
+        tcb::span<const std::byte> buf) const;
     [[nodiscard]] NET_EXPORT Result<void> accept() const;
     [[nodiscard]] NET_EXPORT Result<void> connect() const;
 
@@ -141,10 +141,10 @@ struct SslProvider {
     [[nodiscard]] NET_EXPORT Result<void> set_private_key_file(
         const std::string& file, SslFileType type) const;
 
-    template<Stream S>
-    [[nodiscard]] NET_EXPORT Result<SslStream<S>> accept(S stream) const;
-    template<Stream S> [[nodiscard]] NET_EXPORT Result<SslStream<S>> connect(
-        std::optional<std::string_view> host, S stream) const;
+    template<typename Stream> [[nodiscard]] NET_EXPORT Result<SslStream<Stream>>
+    accept(Stream stream) const;
+    template<typename Stream> [[nodiscard]] NET_EXPORT Result<SslStream<Stream>>
+    connect(std::optional<std::string_view> host, Stream stream) const;
 
 private:
     SslProvider() = default;

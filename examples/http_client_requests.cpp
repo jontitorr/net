@@ -14,14 +14,15 @@ int main()
     const auto* url = "http://httpbin.org/";
 
     for (const auto& method : methods) {
-        const auto res = net::http::request(url, {
-            .method = method,
-            .path = "/anything",
-            .body = "Hello, world!",
-            .headers = {
-                { "Content-Type", "text/plain" },
-            },
-        });
+        const auto res = net::http::request(url,
+            {
+                method,
+                "/anything",
+                "Hello, world!",
+                {
+                    { "Content-Type", "text/plain" },
+                },
+            });
 
         if (!res) {
             std::cout << "Error: " << res.error().message() << '\n';

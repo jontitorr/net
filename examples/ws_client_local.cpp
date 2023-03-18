@@ -35,7 +35,7 @@ int main()
     std::mt19937 gen(rd());
     std::uniform_int_distribution<size_t> dis(0, alphanum.size() - 1);
 
-    std::jthread send_thread([&client, &dis, &gen] {
+    std::thread send_thread([&client, &dis, &gen] {
         std::this_thread::sleep_for(std::chrono::seconds { 5 });
 
         for (size_t i {}; i < 100'000; ++i) {
@@ -55,4 +55,5 @@ int main()
     });
 
     client->run();
+    send_thread.join();
 }

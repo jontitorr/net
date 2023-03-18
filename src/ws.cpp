@@ -164,7 +164,7 @@ net::Result<void> read_until_size_is(
 
         do {
             const auto res = stream.read(
-                std::as_writable_bytes(std::span { container }.subspan(
+                tcb::as_writable_bytes(tcb::span { container }.subspan(
                     container.size() - needed, needed)));
 
             if (!res) {
@@ -194,9 +194,9 @@ const std::vector<std::byte>& heartbeat_message()
 namespace net {
 Result<void> WebSocketClient::send(std::string_view message)
 {
-    const auto message_span = std::as_bytes(std::span(message));
-    return send_raw({ .opcode = WebSocketOpcode::Text,
-        .payload = std::vector(message_span.begin(), message_span.end()) });
+    const auto message_span = tcb::as_bytes(tcb::span(message));
+    return send_raw({ WebSocketOpcode::Text,
+        std::vector(message_span.begin(), message_span.end()) });
 }
 
 Result<void> WebSocketClient::close(
@@ -211,7 +211,7 @@ Result<void> WebSocketClient::close(
 
     m_state->connection_state.store(ConnectionState::Disconnecting);
 
-    const auto reason_span = std::as_bytes(std::span(reason));
+    const auto reason_span = tcb::as_bytes(tcb::span(reason));
 
     std::vector<std::byte> payload;
     payload.reserve(2 + reason.size());
@@ -219,8 +219,7 @@ Result<void> WebSocketClient::close(
     payload.push_back(static_cast<std::byte>(static_cast<uint16_t>(code)));
     payload.insert(payload.end(), reason_span.begin(), reason_span.end());
 
-    return send_raw(
-        { .opcode = WebSocketOpcode::Close, .payload = std::move(payload) });
+    return send_raw({ WebSocketOpcode::Close, std::move(payload) });
 }
 
 Result<void> WebSocketClient::run()
@@ -239,15 +238,17 @@ Result<void> WebSocketClient::run()
             }
         }
 
-        std::jthread heartbeat_thread { &WebSocketClient::heartbeat_loop,
-            this };
-        std::jthread read_thread { &WebSocketClient::read_loop, this };
+        std::thread heartbeat_thread { &WebSocketClient::heartbeat_loop, this };
+        std::thread read_thread { &WebSocketClient::read_loop, this };
 
         while (
             m_state->connection_state.load() != ConnectionState::Disconnected) {
             m_state->activity_flag.wait(false);
             poll();
         }
+
+        read_thread.join();
+        heartbeat_thread.join();
     } while (m_state->auto_reconnect.load());
 
     return {};
@@ -277,10 +278,8 @@ Result<void> WebSocketClient::connect()
 
     http_set_nonblocking(*m_http_connection, false);
 
-    const auto res = m_http_connection->request({ .method = HttpMethod::Get,
-        .path = get_path_query_fragment(m_uri),
-        .body = {},
-        .headers = headers });
+    const auto res = m_http_connection->request(
+        { HttpMethod::Get, get_path_query_fragment(m_uri), {}, headers });
 
     http_set_nonblocking(*m_http_connection, true);
 
@@ -293,19 +292,19 @@ Result<void> WebSocketClient::connect()
             std::make_error_code(std::errc::connection_refused));
     }
 
-    if (!res->headers.contains("Upgrade")
+    if (res->headers.find("Upgrade") == res->headers.end()
         || !iequals(res->headers.at("Upgrade"), "websocket")) {
         return tl::make_unexpected(
             std::make_error_code(std::errc::connection_refused));
     }
 
-    if (!res->headers.contains("Connection")
+    if (res->headers.find("Connection") == res->headers.end()
         || !iequals(res->headers.at("Connection"), "upgrade")) {
         return tl::make_unexpected(
             std::make_error_code(std::errc::connection_refused));
     }
 
-    if (!res->headers.contains("Sec-WebSocket-Accept")
+    if (res->headers.find("Sec-WebSocket-Accept") == res->headers.end()
         || res->headers.at("Sec-WebSocket-Accept") != compute_ws_accept(key)) {
         return tl::make_unexpected(
             std::make_error_code(std::errc::connection_refused));
@@ -343,7 +342,7 @@ void WebSocketClient::disconnect()
         m_write_queue = {};
     }
 
-    m_state->activity_flag.test_and_set();
+    m_state->activity_flag.set();
     m_state->activity_flag.notify_one();
     m_state->cv.notify_one();
     m_state->heartbeat_flag.clear();
@@ -356,13 +355,12 @@ void WebSocketClient::heartbeat_loop()
 {
     while (true) {
         if (m_state->connection_state.load() == ConnectionState::Disconnected
-            || !send_raw({ .opcode = WebSocketOpcode::Ping,
-                .payload = heartbeat_message() })) {
+            || !send_raw({ WebSocketOpcode::Ping, heartbeat_message() })) {
             return;
         }
 
         m_state->missed_heartbeat.store(true);
-        m_state->heartbeat_flag.test_and_set();
+        m_state->heartbeat_flag.set();
         m_state->heartbeat_flag.wait(true);
 
         if (m_state->connection_state.load() == ConnectionState::Disconnected) {
@@ -389,9 +387,8 @@ void WebSocketClient::heartbeat_loop()
 void WebSocketClient::read_loop()
 {
     while (true) {
-        const auto state = m_state->connection_state.load();
-
-        if (!m_http_connection || state == ConnectionState::Disconnected) {
+        if (const auto state = m_state->connection_state.load();
+            !m_http_connection || state == ConnectionState::Disconnected) {
             return;
         }
 
@@ -406,9 +403,9 @@ void WebSocketClient::read_loop()
         }
 
         // We found data to be read.
-        m_state->read_flag.test_and_set();
+        m_state->read_flag.set();
         // Notify the main thread that we have work to do.
-        m_state->activity_flag.test_and_set();
+        m_state->activity_flag.set();
         m_state->activity_flag.notify_one();
         // Wait for the main thread to finish processing the data.
         m_state->read_flag.wait(true);
@@ -426,7 +423,7 @@ void WebSocketClient::poll()
 
     auto res = std::visit(
         [&buf](const auto& stream) {
-            return stream.read(std::as_writable_bytes(std::span { buf }));
+            return stream.read(tcb::as_writable_bytes(tcb::span { buf }));
         },
         m_http_connection->stream());
 
@@ -462,7 +459,7 @@ void WebSocketClient::poll()
 
             res = std::visit(
                 [&payload = frame.payload](const auto& stream) {
-                    return stream.write(std::as_bytes(std::span { payload }));
+                    return stream.write(tcb::as_bytes(tcb::span { payload }));
                 },
                 m_http_connection->stream());
 
@@ -513,15 +510,11 @@ void WebSocketClient::process_data(std::vector<std::byte>& data)
         }
 
         // Processing our WebSocket Frames.
-        WebSocketFrame frame { .opcode = static_cast<WebSocketOpcode>(
+        WebSocketFrame frame { static_cast<WebSocketOpcode>(
                                    (data[0] & std::byte { 0b00001111 })),
-            .fin = static_cast<bool>((data[0] & std::byte { 0b10000000 }) >> 7),
-            .mask
-            = static_cast<bool>((data[1] & std::byte { 0b10000000 }) >> 7),
-            .payload_length
-            = static_cast<uint64_t>(data[1] & std::byte { 0b01111111 }),
-            .masking_key {},
-            .payload {} };
+            static_cast<bool>((data[0] & std::byte { 0b10000000 }) >> 7),
+            static_cast<bool>((data[1] & std::byte { 0b10000000 }) >> 7),
+            static_cast<uint64_t>(data[1] & std::byte { 0b01111111 }), {}, {} };
 
         const auto payload_start = [&frame] {
             uint8_t ret { 2 };
@@ -612,8 +605,8 @@ void WebSocketClient::process_data(std::vector<std::byte>& data)
 
             if (frame.fin) {
                 WebSocketMessage message {
-                    .is_text = *m_leftover_opcode == WebSocketOpcode::Text,
-                    .payload = std::move(m_read_buffer),
+                    *m_leftover_opcode == WebSocketOpcode::Text,
+                    std::move(m_read_buffer),
                 };
 
                 m_read_buffer.clear();
@@ -707,11 +700,10 @@ Result<void> WebSocketClient::send_raw(const RawMessage& message)
 
     {
         std::scoped_lock lk { m_state->mtx };
-        m_write_queue.emplace(RawMessage {
-            .opcode = message.opcode, .payload = std::move(frame) });
+        m_write_queue.emplace(RawMessage { message.opcode, std::move(frame) });
     }
 
-    m_state->activity_flag.test_and_set();
+    m_state->activity_flag.set();
     m_state->activity_flag.notify_one();
 
     return {};

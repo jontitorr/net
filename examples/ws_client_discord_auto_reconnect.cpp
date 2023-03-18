@@ -28,7 +28,7 @@ int main()
               .with_url("wss://gateway.discord.gg/?v=10&encoding=json")
               .build();
 
-    std::jthread t([&client, &connected, &running] {
+    std::thread t([&client, &connected, &running] {
         while (running.load()) {
             std::this_thread::sleep_for(std::chrono::seconds { 5 });
 
@@ -46,4 +46,6 @@ int main()
         std::cout << "Error running client: " << res.error().message() << '\n';
         running = false;
     }
+
+    t.join();
 }

@@ -1,6 +1,7 @@
 #include <filesystem>
 #include <fstream>
 #include <net/http.hpp>
+#include <sstream>
 
 using net::HttpMethod;
 using net::HttpResponse;
@@ -37,17 +38,19 @@ int main()
     }
 
     server->add_route(HttpMethod::Get, "/", [](const ServerHttpRequest& req) {
-        const auto connection = req.headers.contains("Connection")
+        const auto connection
+            = req.headers.find("Connection") != req.headers.end()
             ? req.headers.at("Connection")
             : "close";
 
         return HttpResponse {
-            .status_code = HttpStatus::Ok,
-            .status_message = "OK",
-            .body = "<!DOCTYPE html><html><head><title>Hello, world!</title></head><body><h1>Hello, world!</h1></body></html>",
-            .headers = {
+            HttpStatus::Ok,
+            "OK",
+            "<!DOCTYPE html><html><head><title>Hello, "
+            "world!</title></head><body><h1>Hello, world!</h1></body></html>",
+            {
                 { "Content-Type", "text/html" },
-                {"Connection", connection},
+                { "Connection", connection },
             },
         };
     });
@@ -61,7 +64,7 @@ int main()
 
             const auto query = Uri::parse(req.path).query;
 
-            if (!query.contains("name")) {
+            if (query.find("name") == query.end()) {
                 res.status_code = HttpStatus::BadRequest;
                 res.status_message = "Bad Request";
                 res.body = "Missing 'name' query parameter";
@@ -106,13 +109,13 @@ int main()
     server->add_route(
         HttpMethod::Post, "/hello", [](const ServerHttpRequest& req) {
             return HttpResponse {
-            .status_code = HttpStatus::Ok,
-            .status_message = "OK",
-            .body = "Hello, " + req.body + "!",
-            .headers = {
-                { "Content-Type", "text/plain" },
-            },
-        };
+                HttpStatus::Ok,
+                "OK",
+                "Hello, " + req.body + "!",
+                {
+                    { "Content-Type", "text/plain" },
+                },
+            };
         });
 
     (void)server->run();

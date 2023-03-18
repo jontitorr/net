@@ -18,17 +18,17 @@ struct NET_EXPORT TcpStream {
         return m_inner.as_raw_socket();
     }
 
-    [[nodiscard]] Result<size_t> peek(std::span<std::byte> buf) const
+    [[nodiscard]] Result<size_t> peek(tcb::span<std::byte> buf) const
     {
         return m_inner.peek(buf);
     }
 
-    [[nodiscard]] Result<size_t> read(std::span<std::byte> buf) const
+    [[nodiscard]] Result<size_t> read(tcb::span<std::byte> buf) const
     {
         return m_inner.read(buf);
     }
 
-    [[nodiscard]] Result<size_t> write(std::span<const std::byte> data) const
+    [[nodiscard]] Result<size_t> write(tcb::span<const std::byte> data) const
     {
         return m_inner.write(data);
     }
@@ -111,6 +111,11 @@ struct NET_EXPORT TcpListener {
             bool operator==(const Iterator& other) const
             {
                 return m_current == other.m_current;
+            }
+
+            bool operator!=(const Iterator& other) const
+            {
+                return !(*this == other);
             }
 
         private:

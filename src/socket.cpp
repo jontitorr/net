@@ -1,7 +1,7 @@
 #include <cassert>
 #include <cstring>
+#include <limits>
 #include <net/socket.hpp>
-#include <numeric>
 
 #ifdef _WIN32
 #include <WS2tcpip.h>
@@ -211,7 +211,7 @@ Result<std::pair<Socket, SocketAddr>> Socket::accept() const
 }
 
 Result<size_t> Socket::recv_with_flags(
-    std::span<std::byte> buf, int flags) const
+    tcb::span<std::byte> buf, int flags) const
 {
     const auto len = (std::min)(buf.size(), MAX_READ_SIZE);
 
@@ -239,13 +239,13 @@ Result<size_t> Socket::recv_with_flags(
     return static_cast<size_t>(result);
 }
 
-Result<size_t> Socket::peek(std::span<std::byte> buf) const
+Result<size_t> Socket::peek(tcb::span<std::byte> buf) const
 {
     return recv_with_flags(buf, MSG_PEEK);
 }
 
 Result<std::pair<size_t, SocketAddr>> Socket::recv_from_with_flags(
-    std::span<std::byte> buf, int flags) const
+    tcb::span<std::byte> buf, int flags) const
 {
     sockaddr_storage storage {};
     socklen_t addrlen = sizeof(storage);
@@ -287,12 +287,12 @@ Result<std::pair<size_t, SocketAddr>> Socket::recv_from_with_flags(
 }
 
 Result<std::pair<size_t, SocketAddr>> Socket::peek_from(
-    std::span<std::byte> buf) const
+    tcb::span<std::byte> buf) const
 {
     return recv_from_with_flags(buf, MSG_PEEK);
 }
 
-Result<size_t> Socket::send(std::span<const std::byte> buf) const
+Result<size_t> Socket::send(tcb::span<const std::byte> buf) const
 {
     const auto len = static_cast<int>((std::min)(buf.size(), MAX_READ_SIZE));
 
@@ -317,20 +317,19 @@ Result<void> Socket::shutdown(Shutdown how) const
 {
     const auto h = [how]() -> int {
         switch (how) {
-            using enum Shutdown;
-        case Read:
+        case Shutdown::Read:
 #ifdef _WIN32
             return SD_RECEIVE;
 #else
             return SHUT_RD;
 #endif
-        case Write:
+        case Shutdown::Write:
 #ifdef _WIN32
             return SD_SEND;
 #else
             return SHUT_WR;
 #endif
-        case Both:
+        case Shutdown::Both:
 #ifdef _WIN32
             return SD_BOTH;
 #else
@@ -404,12 +403,11 @@ Result<void> Socket::poll(int timeout_ms, PollEvent want) const
     pfd.fd = as_raw_socket();
     pfd.events = [want]() -> short {
         switch (want) {
-            using enum PollEvent;
-        case Read:
+        case PollEvent::Read:
             return POLLIN;
-        case Write:
+        case PollEvent::Write:
             return POLLOUT;
-        case Both:
+        case PollEvent::Both:
             return POLLIN | POLLOUT;
         }
 

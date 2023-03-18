@@ -9,6 +9,12 @@ size_t find_or_else(std::string_view str, char c, size_t default_value)
     return pos == std::string_view::npos ? default_value : pos;
 }
 
+bool starts_with(std::string_view str, std::string_view prefix)
+{
+    return str.length() >= prefix.length()
+        && str.substr(0, prefix.length()) == prefix;
+}
+
 char get_safe_char(
     std::string_view str, size_t index, char default_value = '\0')
 {
@@ -101,7 +107,7 @@ void parse_authority(net::Uri& uri_struct, std::string_view authority)
     }
 
     // Remove colon from port string, if present.
-    if (port_str.starts_with(':')) {
+    if (starts_with(port_str, ":")) {
         port_str.remove_prefix(1);
     }
 
@@ -128,7 +134,9 @@ Uri Uri::parse(std::string_view uri_str)
                 && get_safe_char(uri_str, i + 1) == '/';
         };
 
-        for (size_t i {}; const auto& c : uri_str) {
+        size_t i {};
+
+        for (const auto& c : uri_str) {
             if (c == '/') {
                 if (is_double_slash(i) && scheme_found) {
                     uri.scheme = to_lowercase(uri_str.substr(0, ret - 1));
@@ -169,7 +177,7 @@ Uri Uri::parse(std::string_view uri_str)
     bool has_authority {};
 
     // Split off the authority marker if it is still present.
-    if (authority_and_path.starts_with("//")) {
+    if (starts_with(authority_and_path, "//")) {
         has_authority = true;
         authority_and_path.remove_prefix(2);
     }
@@ -200,7 +208,7 @@ Uri Uri::parse(std::string_view uri_str)
     // Parse the query.
 
     // Remove the ? from the query, if it is present.
-    if (query.starts_with('?')) {
+    if (starts_with(query, "?")) {
         query.remove_prefix(1);
     }
 
@@ -212,7 +220,7 @@ Uri Uri::parse(std::string_view uri_str)
                 find_or_else(query_parameter, '=', query_parameter.length()));
 
             uri.query.try_emplace(std::string(key),
-                value.starts_with('=') ? value.substr(1) : value);
+                starts_with(value, "=") ? value.substr(1) : value);
         }
     }
 

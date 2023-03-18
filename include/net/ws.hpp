@@ -122,10 +122,39 @@ private:
         std::atomic<ConnectionState> connection_state {
             ConnectionState::Disconnected
         };
+
+        struct Flag {
+            void clear()
+            {
+                std::unique_lock lock { m_mtx };
+                m_value = false;
+            }
+
+            void set()
+            {
+                std::unique_lock lock { m_mtx };
+                m_value = true;
+                m_cv.notify_all();
+            }
+
+            void wait(bool old)
+            {
+                std::unique_lock lock { m_mtx };
+                m_cv.wait(lock, [this, old] { return m_value != old; });
+            }
+
+            void notify_one() { m_cv.notify_one(); }
+
+        private:
+            bool m_value {};
+            std::condition_variable m_cv;
+            std::mutex m_mtx;
+        };
+
         std::atomic_bool missed_heartbeat;
-        std::atomic_flag activity_flag;
-        std::atomic_flag heartbeat_flag;
-        std::atomic_flag read_flag;
+        Flag activity_flag;
+        Flag heartbeat_flag;
+        Flag read_flag;
         mutable std::mutex heartbeat_mtx;
         mutable std::mutex mtx;
         std::condition_variable cv;

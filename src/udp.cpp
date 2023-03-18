@@ -1,7 +1,7 @@
 #include <cassert>
 #include <cstring>
+#include <limits>
 #include <net/udp.hpp>
-#include <numeric>
 
 #ifdef _WIN32
 #include <WS2tcpip.h>
@@ -149,7 +149,7 @@ Result<SocketAddr> UdpSocket::socket_addr() const
 }
 
 Result<size_t> UdpSocket::send_to(
-    std::span<const std::byte> buf, SocketAddr addr) const
+    tcb::span<const std::byte> buf, SocketAddr addr) const
 {
     const auto len = static_cast<int>((std::min)(
         buf.size(), static_cast<size_t>((std::numeric_limits<int>::max)())));

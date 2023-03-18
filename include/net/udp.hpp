@@ -16,19 +16,19 @@ struct NET_EXPORT UdpSocket {
     [[nodiscard]] Result<SocketAddr> socket_addr() const;
 
     [[nodiscard]] Result<std::pair<size_t, SocketAddr>> recv_from(
-        std::span<std::byte> buf) const
+        tcb::span<std::byte> buf) const
     {
         return m_inner.recv_from(buf);
     }
 
     [[nodiscard]] Result<std::pair<size_t, SocketAddr>> peek_from(
-        std::span<std::byte> buf) const
+        tcb::span<std::byte> buf) const
     {
         return m_inner.peek_from(buf);
     }
 
     [[nodiscard]] Result<size_t> send_to(
-        std::span<const std::byte> buf, SocketAddr addr) const;
+        tcb::span<const std::byte> buf, SocketAddr addr) const;
 
     [[nodiscard]] Result<void> set_nonblocking(bool nonblocking) const
     {
@@ -40,27 +40,27 @@ struct NET_EXPORT UdpSocket {
         return m_inner.set_broadcast(broadcast);
     }
 
-    [[nodiscard]] Result<size_t> recv(std::span<std::byte> buf) const
+    [[nodiscard]] Result<size_t> recv(tcb::span<std::byte> buf) const
     {
         return m_inner.recv(buf);
     }
 
-    [[nodiscard]] Result<size_t> peek(std::span<std::byte> buf) const
+    [[nodiscard]] Result<size_t> peek(tcb::span<std::byte> buf) const
     {
         return m_inner.peek(buf);
     }
 
-    [[nodiscard]] Result<size_t> send(std::span<const std::byte> buf) const
+    [[nodiscard]] Result<size_t> send(tcb::span<const std::byte> buf) const
     {
         return m_inner.send(buf);
     }
 
-    [[nodiscard]] Result<size_t> read(std::span<std::byte> buf) const
+    [[nodiscard]] Result<size_t> read(tcb::span<std::byte> buf) const
     {
         return recv(buf);
     }
 
-    [[nodiscard]] Result<size_t> write(std::span<const std::byte> buf) const
+    [[nodiscard]] Result<size_t> write(tcb::span<const std::byte> buf) const
     {
         return send(buf);
     }

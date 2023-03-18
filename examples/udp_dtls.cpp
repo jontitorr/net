@@ -26,7 +26,7 @@ int main()
 
     auto server_acceptor = *SslProvider::create(SslMethod::DtlsServer);
 
-    const std::jthread client_thread { [] {
+    std::thread client_thread { [] {
         auto client_connector = *SslProvider::create(SslMethod::DtlsClient);
         auto client = UdpSocket::bind(*SocketAddr::parse("0.0.0.0:0"));
 
@@ -55,14 +55,14 @@ int main()
         std::cout << "(Client) SSL Connected to server.\n";
 
         const auto sent
-            = ssl_stream->write(std::as_bytes(std::span { "Hello World!" }));
+            = ssl_stream->write(tcb::as_bytes(tcb::span { "Hello World!" }));
 
         std::cout << "(Client) Sent " << *sent << " bytes.\n";
 
         std::array<std::byte, 1024> buf {};
 
         const auto read
-            = ssl_stream->read(std::as_writable_bytes(std::span { buf }));
+            = ssl_stream->read(tcb::as_writable_bytes(tcb::span { buf }));
 
         if (!read) {
             std::cout << "(Client) Failed to read from server.\n";
@@ -83,18 +83,20 @@ int main()
     if (!ssl_stream) {
         std::cout << "(Server) Failed to accept client: " << ssl_stream.error()
                   << '\n';
+        client_thread.join();
         return 1;
     }
 
     std::array<std::byte, 1024> buf {};
 
     const auto read
-        = ssl_stream->read(std::as_writable_bytes(std::span { buf }));
+        = ssl_stream->read(tcb::as_writable_bytes(tcb::span { buf }));
 
     std::cout << "(Server) Read " << *read << " bytes.\n";
 
     const auto sent
-        = ssl_stream->write(std::as_bytes(std::span { "Hello World!" }));
+        = ssl_stream->write(tcb::as_bytes(tcb::span { "Hello World!" }));
 
     std::cout << "(Server) Sent " << *sent << " bytes.\n";
+    client_thread.join();
 }

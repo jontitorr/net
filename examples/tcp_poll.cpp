@@ -29,7 +29,7 @@ int main()
 
         std::array<char, 1024> buf {};
         const auto read_res
-            = client->read(std::as_writable_bytes(std::span(buf)));
+            = client->read(tcb::as_writable_bytes(tcb::span(buf)));
 
         if (!read_res) {
             std::cout << "Error: " << read_res.error().message() << '\n';

@@ -1,5 +1,6 @@
 #pragma once
 #include <array>
+#include <cstddef>
 #include <net/export.h>
 #include <net/util.hpp>
 #include <string_view>
@@ -27,7 +28,10 @@ struct NET_EXPORT Ipv4Addr {
     [[nodiscard]] std::array<std::byte, 4> octets() const { return m_octets; }
     [[nodiscard]] std::string to_string() const;
 
-    bool operator==(const Ipv4Addr& other) const = default;
+    bool operator==(const Ipv4Addr& other) const
+    {
+        return m_octets == other.m_octets;
+    }
 
 private:
     Ipv4Addr() = default;
@@ -59,7 +63,10 @@ struct NET_EXPORT Ipv6Addr {
     [[nodiscard]] std::array<std::byte, 16> octets() const { return m_octets; }
     [[nodiscard]] std::string to_string() const;
 
-    bool operator==(const Ipv6Addr& other) const = default;
+    bool operator==(const Ipv6Addr& other) const
+    {
+        return m_octets == other.m_octets;
+    }
 
 private:
     Ipv6Addr() = default;

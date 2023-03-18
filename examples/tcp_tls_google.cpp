@@ -31,8 +31,8 @@ int main()
         return print_error_code(ssl_stream.error());
     }
 
-    const auto sent = ssl_stream->write(std::as_bytes(
-        std::span { "GET / HTTP/1.1\r\nHost: google.com\r\n\r\n" }));
+    const auto sent = ssl_stream->write(tcb::as_bytes(
+        tcb::span { "GET / HTTP/1.1\r\nHost: google.com\r\n\r\n" }));
 
     if (!sent) {
         std::cout << "(Client) Failed to write to server.\n";
@@ -44,7 +44,7 @@ int main()
     std::array<std::byte, 1024> buf {};
 
     const auto read
-        = ssl_stream->read(std::as_writable_bytes(std::span { buf }));
+        = ssl_stream->read(tcb::as_writable_bytes(tcb::span { buf }));
 
     if (!read) {
         std::cout << "(Client) Failed to read from server.\n";

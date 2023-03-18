@@ -63,6 +63,24 @@ cpmfindpackage(
     "BUILD_SHARED_LIBS ON"
     "WITH_APPS OFF"
 )
+if(NOT EXISTS "${CMAKE_BINARY_DIR}/_deps/span-src/tcb/span.hpp")
+    file(
+        DOWNLOAD
+        "https://raw.githubusercontent.com/tcbrindle/span/master/include/tcb/span.hpp"
+        "${CMAKE_BINARY_DIR}/_deps/span-src/tcb/span.hpp"
+        TLS_VERIFY ON
+    )
+endif()
+
+add_library(span INTERFACE)
+target_sources(
+    span
+    INTERFACE $<BUILD_INTERFACE:${CMAKE_BINARY_DIR}/_deps/span-src/tcb/span.hpp>
+)
+target_include_directories(
+    span INTERFACE $<BUILD_INTERFACE:${CMAKE_BINARY_DIR}/_deps/span-src>
+                   $<INSTALL_INTERFACE:include>
+)
 
 if(NOT EXISTS "${CMAKE_BINARY_DIR}/_deps/tl-expected-src/tl/expected.hpp")
     file(
@@ -101,7 +119,7 @@ target_compile_definitions(
         $<$<NOT:$<BOOL:${BUILD_SHARED_LIBS}>>:${PROJECT_NAME_UPPERCASE}_STATIC_DEFINE>
 )
 
-target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_20)
+target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_17)
 target_include_directories(
     ${PROJECT_NAME}
     PUBLIC $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
@@ -109,7 +127,7 @@ target_include_directories(
            $<INSTALL_INTERFACE:include>
 )
 
-set(${PROJECT_NAME}_TARGETS ${PROJECT_NAME} tl-expected)
+set(${PROJECT_NAME}_TARGETS ${PROJECT_NAME} span tl-expected)
 set(SEPARATE_DEPENDENCIES "")
 
 if(OpenSSL_ADDED)
@@ -120,7 +138,7 @@ else()
     list(APPEND SEPARATE_DEPENDENCIES "OpenSSL")
 endif()
 
-target_link_libraries(${PROJECT_NAME} PUBLIC tl-expected)
+target_link_libraries(${PROJECT_NAME} PUBLIC span tl-expected)
 
 if(WIN32)
     target_link_libraries(${PROJECT_NAME} PRIVATE wsock32 ws2_32)
@@ -160,6 +178,10 @@ if(${PROJECT_NAME}_INSTALL)
         FILE ${PROJECT_NAME}Targets.cmake
         NAMESPACE ${PROJECT_NAME}::
         DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME}
+    )
+
+    install(DIRECTORY ${CMAKE_BINARY_DIR}/_deps/span-src/tcb
+            DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
     )
 
     install(DIRECTORY ${CMAKE_BINARY_DIR}/_deps/tl-expected-src/tl

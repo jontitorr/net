@@ -1,7 +1,7 @@
 #include <cassert>
 #include <cstring>
+#include <limits>
 #include <net/ssl.hpp>
-#include <numeric>
 
 #ifndef _WIN32
 #pragma GCC diagnostic push
@@ -63,17 +63,31 @@ using net::Result;
 using net::SslError;
 using net::SslMethod;
 
-using UniqueBIO
-    = std::unique_ptr<BIO, decltype([](BIO* bio) { BIO_free(bio); })>;
+template<typename T> struct DeleterOf;
 
-using UniqueBIO_ADDR = std::unique_ptr<BIO_ADDR,
-    decltype([](BIO_ADDR* addr) { BIO_ADDR_free(addr); })>;
+template<> struct DeleterOf<BIO> {
+    void operator()(BIO* bio) const { BIO_free(bio); }
+};
 
-using UniqueBIO_METHOD = std::unique_ptr<BIO_METHOD,
-    decltype([](BIO_METHOD* method) { BIO_meth_free(method); })>;
+template<> struct DeleterOf<BIO_ADDR> {
+    void operator()(BIO_ADDR* addr) const { BIO_ADDR_free(addr); }
+};
 
-using UniqueSSL
-    = std::unique_ptr<SSL, decltype([](SSL* ssl) { SSL_free(ssl); })>;
+template<> struct DeleterOf<BIO_METHOD> {
+    void operator()(BIO_METHOD* method) const { BIO_meth_free(method); }
+};
+
+template<> struct DeleterOf<SSL> {
+    void operator()(SSL* ssl) const { SSL_free(ssl); }
+};
+
+using UniqueBIO = std::unique_ptr<BIO, DeleterOf<BIO>>;
+
+using UniqueBIO_ADDR = std::unique_ptr<BIO_ADDR, DeleterOf<BIO_ADDR>>;
+
+using UniqueBIO_METHOD = std::unique_ptr<BIO_METHOD, DeleterOf<BIO_METHOD>>;
+
+using UniqueSSL = std::unique_ptr<SSL, DeleterOf<SSL>>;
 
 constexpr int COOKIE_SECRET_LENGTH { 16 };
 const std::array<unsigned char, COOKIE_SECRET_LENGTH>& cookie_secret()
@@ -259,18 +273,17 @@ struct SslContext {
 
         auto* ctx = [method] {
             switch (method) {
-                using enum net::SslMethod;
-            case Tls:
+            case net::SslMethod::Tls:
                 return SSL_CTX_new(TLS_method());
-            case TlsClient:
+            case net::SslMethod::TlsClient:
                 return SSL_CTX_new(TLS_client_method());
-            case TlsServer:
+            case net::SslMethod::TlsServer:
                 return SSL_CTX_new(TLS_server_method());
-            case Dtls:
+            case net::SslMethod::Dtls:
                 return SSL_CTX_new(DTLS_method());
-            case DtlsClient:
+            case net::SslMethod::DtlsClient:
                 return SSL_CTX_new(DTLS_client_method());
-            case DtlsServer:
+            case net::SslMethod::DtlsServer:
                 return SSL_CTX_new(DTLS_server_method());
             default:
                 return static_cast<SSL_CTX*>(nullptr);
@@ -324,11 +337,11 @@ using net::TcpStream;
 using net::UdpSocket;
 
 struct Ssl {
-    template<net::Stream S> static Result<Ssl> create(
-        const SslContext& ctx, const S& stream, bool is_client)
+    template<typename Stream> static Result<Ssl> create(
+        const SslContext& ctx, const Stream& stream, bool is_client)
     {
         auto* s_bio = [&stream] {
-            if constexpr (std::is_same_v<S, TcpStream>) {
+            if constexpr (std::is_same_v<Stream, TcpStream>) {
                 return [&stream]() -> BIO* {
                     static const auto* method = [] {
                         auto* ret = BIO_meth_new(BIO_TYPE_SOCKET, "net_socket");
@@ -518,16 +531,14 @@ private:
     UniqueBIO m_ssl;
 };
 
-using net::Stream;
-
-template<Stream S> struct StreamState {
+template<typename Stream> struct StreamState {
     UniqueBIO bio; // Will utilize the stream/socket for I/O.
-    S stream; // Held for lifetime management.
+    Stream stream; // Held for lifetime management.
 };
 
-template<Stream S> inline StreamState<S>& state(BIO* bio)
+template<typename Stream> inline StreamState<Stream>& state(BIO* bio)
 {
-    return *static_cast<StreamState<S>*>(BIO_get_data(bio));
+    return *static_cast<StreamState<Stream>*>(BIO_get_data(bio));
 }
 
 template<typename T = void> Result<T> cvt_ssl(int ret, const Ssl& ssl)
@@ -558,28 +569,27 @@ const std::error_category& ssl_error_category() noexcept
         [[nodiscard]] std::string message(int ev) const override
         {
             switch (static_cast<SslError>(ev)) {
-                using enum net::SslError;
-            case None:
+            case net::SslError::None:
                 return "No error";
-            case ZeroReturn:
+            case net::SslError::ZeroReturn:
                 return "The TLS/SSL connection has been closed";
-            case WantRead:
-            case WantWrite:
-            case WantConnect:
-            case WantAccept:
+            case net::SslError::WantRead:
+            case net::SslError::WantWrite:
+            case net::SslError::WantConnect:
+            case net::SslError::WantAccept:
                 return "The operation did not complete; the same TLS/SSL I/O "
                        "function should be called again later";
-            case WantX509Lookup:
+            case net::SslError::WantX509Lookup:
                 return "The operation did not complete because an application "
                        "callback set by SSL_CTX_set_client_cert_cb() has "
                        "asked to be called again. The TLS/SSL I/O function "
                        "should be called again later";
-            case Syscall:
+            case net::SslError::Syscall:
                 return "Some I/O error occurred";
-            case Ssl:
+            case net::SslError::Ssl:
                 return "A failure in the SSL library occurred, usually a "
                        "protocol error";
-            case Unknown:
+            case net::SslError::Unknown:
                 return "Unknown error";
             }
 
@@ -589,29 +599,30 @@ const std::error_category& ssl_error_category() noexcept
     return category;
 }
 
-template<Stream S> struct SslStream<S>::Impl {
-    explicit Impl(Ssl ssl, S stream)
+template<typename Stream> struct SslStream<Stream>::Impl {
+    explicit Impl(Ssl ssl, Stream stream)
         : m_stream { std::move(stream) }
         , m_ssl { std::move(ssl) }
     {
     }
 
-    S m_stream;
+    Stream m_stream;
     Ssl m_ssl;
 };
 
-template<Stream S> SslStream<S>::SslStream(SslStream&&) noexcept = default;
-template<Stream S> SslStream<S>& SslStream<S>::operator=(SslStream&&) noexcept
+template<typename Stream> SslStream<Stream>::SslStream(SslStream&&) noexcept
     = default;
-template<Stream S> SslStream<S>::~SslStream() = default;
+template<typename Stream>
+SslStream<Stream>& SslStream<Stream>::operator=(SslStream&&) noexcept = default;
+template<typename Stream> SslStream<Stream>::~SslStream() = default;
 
-template<Stream S> const Socket& SslStream<S>::socket() const
+template<typename Stream> const Socket& SslStream<Stream>::socket() const
 {
     return m_impl->m_stream.socket();
 }
 
-template<Stream S>
-Result<size_t> SslStream<S>::read(std::span<std::byte> buf) const
+template<typename Stream>
+Result<size_t> SslStream<Stream>::read(tcb::span<std::byte> buf) const
 {
     if (buf.empty()) {
         return {};
@@ -635,8 +646,8 @@ Result<size_t> SslStream<S>::read(std::span<std::byte> buf) const
     return static_cast<size_t>(ret);
 }
 
-template<Stream S>
-Result<size_t> SslStream<S>::write(std::span<const std::byte> buf) const
+template<typename Stream>
+Result<size_t> SslStream<Stream>::write(tcb::span<const std::byte> buf) const
 {
     if (buf.empty()) {
         return {};
@@ -670,12 +681,12 @@ Result<size_t> SslStream<S>::write(std::span<const std::byte> buf) const
     return static_cast<size_t>(ret);
 }
 
-template<Stream S> Result<void> SslStream<S>::accept() const
+template<typename Stream> Result<void> SslStream<Stream>::accept() const
 {
     return cvt_ssl(SSL_accept(m_impl->m_ssl.as_ssl()), m_impl->m_ssl);
 }
 
-template<Stream S> Result<void> SslStream<S>::connect() const
+template<typename Stream> Result<void> SslStream<Stream>::connect() const
 {
     while (true) {
         const auto ret = BIO_do_connect(m_impl->m_ssl.as_raw());
@@ -695,7 +706,7 @@ template<Stream S> Result<void> SslStream<S>::connect() const
     return {};
 }
 
-template<Stream S> Result<void> SslStream<S>::shutdown() const
+template<typename Stream> Result<void> SslStream<Stream>::shutdown() const
 {
     while (true) {
         const auto ret
@@ -713,17 +724,17 @@ template<Stream S> Result<void> SslStream<S>::shutdown() const
         return tl::make_unexpected(ret.error());
     }
 
-    if constexpr (std::is_same_v<S, TcpStream>) {
+    if constexpr (std::is_same_v<Stream, TcpStream>) {
         return m_impl->m_stream.shutdown(Socket::Shutdown::Both);
     } else {
         return {};
     }
 }
 
-template<Stream S>
-Result<void> SslStream<S>::set_nonblocking(bool nonblocking) const
+template<typename Stream>
+Result<void> SslStream<Stream>::set_nonblocking(bool nonblocking) const
 {
-    return ::state<S>(SSL_get_rbio(m_impl->m_ssl.as_ssl()))
+    return ::state<Stream>(SSL_get_rbio(m_impl->m_ssl.as_ssl()))
         .stream.set_nonblocking(nonblocking);
 }
 
@@ -742,10 +753,10 @@ SslProvider::~SslProvider() = default;
 
 Result<SslProvider> SslProvider::create(SslMethod method)
 {
-    using enum net::SslMethod;
-
-    if (method != Tls && method != TlsClient && method != TlsServer
-        && method != Dtls && method != DtlsClient && method != DtlsServer) {
+    if (method != net::SslMethod::Tls && method != net::SslMethod::TlsClient
+        && method != net::SslMethod::TlsServer && method != net::SslMethod::Dtls
+        && method != net::SslMethod::DtlsClient
+        && method != net::SslMethod::DtlsServer) {
         return tl::make_unexpected(
             std::make_error_code(std::errc::invalid_argument));
     }
@@ -823,7 +834,8 @@ Result<void> SslProvider::set_private_key_file(
     return {};
 }
 
-template<Stream S> Result<SslStream<S>> SslProvider::accept(S stream) const
+template<typename Stream>
+Result<SslStream<Stream>> SslProvider::accept(Stream stream) const
 {
     auto ssl = Ssl::create(m_impl->m_ctx, stream, false);
 
@@ -831,10 +843,12 @@ template<Stream S> Result<SslStream<S>> SslProvider::accept(S stream) const
         return tl::make_unexpected(SslError::Ssl);
     }
 
-    SslStream<S> ssl_stream { std::make_unique<typename SslStream<S>::Impl>(
-        std::move(*ssl), std::move(stream)) };
+    SslStream<Stream> ssl_stream {
+        std::make_unique<typename SslStream<Stream>::Impl>(
+            std::move(*ssl), std::move(stream))
+    };
 
-    if constexpr (std::is_same_v<S, UdpSocket>) {
+    if constexpr (std::is_same_v<Stream, UdpSocket>) {
         UniqueBIO_ADDR addr { BIO_ADDR_new() };
         const auto& ssl_ref = ssl_stream.m_impl->m_ssl;
 
@@ -859,8 +873,8 @@ template<Stream S> Result<SslStream<S>> SslProvider::accept(S stream) const
     return ssl_stream;
 }
 
-template<Stream S> Result<SslStream<S>> SslProvider::connect(
-    std::optional<std::string_view> host, S stream) const
+template<typename Stream> Result<SslStream<Stream>> SslProvider::connect(
+    std::optional<std::string_view> host, Stream stream) const
 {
     auto ssl = Ssl::create(m_impl->m_ctx, stream, true);
 
@@ -869,8 +883,10 @@ template<Stream S> Result<SslStream<S>> SslProvider::connect(
         return tl::make_unexpected(SslError::Ssl);
     }
 
-    SslStream<S> ssl_stream { std::make_unique<typename SslStream<S>::Impl>(
-        std::move(*ssl), std::move(stream)) };
+    SslStream<Stream> ssl_stream {
+        std::make_unique<typename SslStream<Stream>::Impl>(
+            std::move(*ssl), std::move(stream))
+    };
 
     if (const auto ret = ssl_stream.connect(); !ret) {
         return tl::make_unexpected(ret.error());

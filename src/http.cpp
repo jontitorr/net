@@ -49,28 +49,26 @@ bool iequals(std::string_view a, std::string_view b)
 
 Result<HttpMethod> http_method_from_str(std::string_view str)
 {
-    using enum HttpMethod;
-
     if (str == "GET") {
-        return Get;
+        return HttpMethod::Get;
     }
     if (str == "POST") {
-        return Post;
+        return HttpMethod::Post;
     }
     if (str == "PUT") {
-        return Put;
+        return HttpMethod::Put;
     }
     if (str == "DELETE") {
-        return Delete;
+        return HttpMethod::Delete;
     }
     if (str == "HEAD") {
-        return Head;
+        return HttpMethod::Head;
     }
     if (str == "OPTIONS") {
-        return Options;
+        return HttpMethod::Options;
     }
     if (str == "PATCH") {
-        return Patch;
+        return HttpMethod::Patch;
     }
 
     return tl::make_unexpected(
@@ -80,20 +78,19 @@ Result<HttpMethod> http_method_from_str(std::string_view str)
 Result<std::string> http_method_to_str(const HttpMethod method)
 {
     switch (method) {
-        using enum HttpMethod;
-    case Get:
+    case HttpMethod::Get:
         return "GET";
-    case Post:
+    case HttpMethod::Post:
         return "POST";
-    case Put:
+    case HttpMethod::Put:
         return "PUT";
-    case Delete:
+    case HttpMethod::Delete:
         return "DELETE";
-    case Head:
+    case HttpMethod::Head:
         return "HEAD";
-    case Options:
+    case HttpMethod::Options:
         return "OPTIONS";
-    case Patch:
+    case HttpMethod::Patch:
         return "PATCH";
     default:
         return tl::make_unexpected(
@@ -185,7 +182,8 @@ HttpHeaders parse_headers(std::string_view headers)
     return ret;
 }
 
-Result<HttpResponse> receive_http_response(auto& stream)
+template<typename Stream>
+Result<HttpResponse> receive_http_response(Stream& stream)
 {
     HttpResponse response {};
     std::string response_str(1024, '\0');
@@ -197,8 +195,8 @@ Result<HttpResponse> receive_http_response(auto& stream)
 
         // We can only write starting from the old length, because we
         // wouldn't want to overwrite the previous data.
-        const auto res = stream.read(std::as_writable_bytes(
-            std::span { response_str }.subspan(old_length)));
+        const auto res = stream.read(tcb::as_writable_bytes(
+            tcb::span { response_str }.subspan(old_length)));
 
         if (!res) {
             return tl::make_unexpected(res.error());
@@ -241,11 +239,13 @@ Result<HttpResponse> receive_http_response(auto& stream)
     response.headers = parse_headers(
         std::string_view { response_str }.substr(end_of_status + 2));
 
-    const size_t content_length = response.headers.contains("Content-Length")
+    const size_t content_length
+        = response.headers.find("Content-Length") != response.headers.end()
         ? std::stoul(response.headers.at("Content-Length"))
         : 0;
 
-    const auto encoded = response.headers.contains("Transfer-Encoding")
+    const auto encoded
+        = response.headers.find("Transfer-Encoding") != response.headers.end()
         && response.headers.at("Transfer-Encoding") == "chunked";
 
     auto bytes_received = body.length();
@@ -253,7 +253,7 @@ Result<HttpResponse> receive_http_response(auto& stream)
 
     while (bytes_received < content_length) {
         const auto res = stream.read(
-            std::as_writable_bytes(std::span { body }.subspan(bytes_received)));
+            tcb::as_writable_bytes(tcb::span { body }.subspan(bytes_received)));
 
         if (!res) {
             return tl::make_unexpected(res.error());
@@ -272,8 +272,8 @@ Result<HttpResponse> receive_http_response(auto& stream)
         auto end_of_chunk = body.find("0\r\n\r\n");
 
         while (end_of_chunk == std::string::npos) {
-            const auto res = stream.read(std::as_writable_bytes(
-                std::span { body }.subspan(bytes_received)));
+            const auto res = stream.read(tcb::as_writable_bytes(
+                tcb::span { body }.subspan(bytes_received)));
 
             if (!res) {
                 return tl::make_unexpected(res.error());
@@ -300,7 +300,8 @@ Result<HttpResponse> receive_http_response(auto& stream)
     return response;
 }
 
-Result<HttpRequest> receive_http_request(auto& stream)
+template<typename Stream>
+Result<HttpRequest> receive_http_request(Stream& stream)
 {
     std::string request_str(1024, '\0');
     size_t end_of_headers {};
@@ -309,8 +310,8 @@ Result<HttpRequest> receive_http_request(auto& stream)
     do {
         const auto old_length = request_len;
 
-        const auto res = stream.read(std::as_writable_bytes(
-            std::span { request_str }.subspan(old_length)));
+        const auto res = stream.read(tcb::as_writable_bytes(
+            tcb::span { request_str }.subspan(old_length)));
 
         if (!res) {
             return tl::make_unexpected(res.error());
@@ -379,7 +380,7 @@ Result<HttpRequest> receive_http_request(auto& stream)
         = parse_headers(request_str.substr(end_of_request_line + 2));
 
     const auto content_length = [&headers]() -> size_t {
-        if (headers.contains("Content-Length")) {
+        if (headers.find("Content-Length") != headers.end()) {
             return static_cast<size_t>(
                 std::stoull(headers.at("Content-Length")));
         }
@@ -392,7 +393,7 @@ Result<HttpRequest> receive_http_request(auto& stream)
 
     while (bytes_received < content_length) {
         const auto res = stream.read(
-            std::as_writable_bytes(std::span { body }.subspan(bytes_received)));
+            tcb::as_writable_bytes(tcb::span { body }.subspan(bytes_received)));
 
         if (!res) {
             return tl::make_unexpected(res.error());
@@ -406,12 +407,11 @@ Result<HttpRequest> receive_http_request(auto& stream)
         bytes_received += *res;
     }
 
-    return HttpRequest {
-        .method = *method, .path = uri, .body = body, .headers = headers
-    };
+    return HttpRequest { *method, uri, body, headers };
 }
 
-Result<void> send_http_response(const auto& stream, const HttpResponse& res)
+template<typename Stream>
+Result<void> send_http_response(const Stream& stream, const HttpResponse& res)
 {
     auto status_str = status_message(res.status_code);
     std::string response_str {};
@@ -438,7 +438,7 @@ Result<void> send_http_response(const auto& stream, const HttpResponse& res)
 
     response_str.append("\r\n").append(res.body);
 
-    if (const auto r = stream.write(std::as_bytes(std::span { response_str }));
+    if (const auto r = stream.write(tcb::as_bytes(tcb::span { response_str }));
         !r) {
         return tl::make_unexpected(r.error());
     }
@@ -446,8 +446,9 @@ Result<void> send_http_response(const auto& stream, const HttpResponse& res)
     return {};
 }
 
-Result<HttpResponse> send_http_request(
-    const auto& stream, const Uri& uri, const HttpRequest& req, bool keep_alive)
+template<typename Stream>
+Result<HttpResponse> send_http_request(const Stream& stream, const Uri& uri,
+    const HttpRequest& req, bool keep_alive)
 {
     auto method_str = http_method_to_str(req.method);
 
@@ -501,7 +502,7 @@ Result<HttpResponse> send_http_request(
 
     line.append("\r\n").append(req.body);
 
-    if (const auto res = stream.write(std::as_bytes(std::span { line }));
+    if (const auto res = stream.write(tcb::as_bytes(tcb::span { line }));
         !res) {
         return tl::make_unexpected(res.error());
     }
@@ -562,24 +563,23 @@ namespace net {
 constexpr std::string_view method_name(HttpMethod method)
 {
     switch (method) {
-        using enum net::HttpMethod;
-    case Get:
+    case HttpMethod::Get:
         return "GET";
-    case Post:
+    case HttpMethod::Post:
         return "POST";
-    case Put:
+    case HttpMethod::Put:
         return "PUT";
-    case Delete:
+    case HttpMethod::Delete:
         return "DELETE";
-    case Head:
+    case HttpMethod::Head:
         return "HEAD";
-    case Options:
+    case HttpMethod::Options:
         return "OPTIONS";
-    case Connect:
+    case HttpMethod::Connect:
         return "CONNECT";
-    case Trace:
+    case HttpMethod::Trace:
         return "TRACE";
-    case Patch:
+    case HttpMethod::Patch:
         return "PATCH";
     default:
         return "UNKNOWN";
@@ -638,12 +638,11 @@ Result<HttpConnection> HttpConnection::connect(std::string_view url)
 Result<HttpResponse> HttpConnection::send_request(
     std::string_view url, const HttpRequest& req)
 {
-    using enum HttpMethod;
-
-    if (req.method != Get && req.method != Post && req.method != Put
-        && req.method != Delete && req.method != Head && req.method != Options
-        && req.method != Connect && req.method != Trace
-        && req.method != Patch) {
+    if (req.method != HttpMethod::Get && req.method != HttpMethod::Post
+        && req.method != HttpMethod::Put && req.method != HttpMethod::Delete
+        && req.method != HttpMethod::Head && req.method != HttpMethod::Options
+        && req.method != HttpMethod::Connect && req.method != HttpMethod::Trace
+        && req.method != HttpMethod::Patch) {
         return tl::make_unexpected(
             std::make_error_code(std::errc::invalid_argument));
     }
@@ -672,12 +671,13 @@ Result<void> HttpConnection::respond(const HttpResponse& res) const
 
 Result<HttpResponse> HttpConnection::request(const HttpRequest& req) const
 {
-    using enum HttpMethod;
-
-    if ((req.method != Get && req.method != Post && req.method != Put
-            && req.method != Delete && req.method != Head
-            && req.method != Options && req.method != Connect
-            && req.method != Trace && req.method != Patch)
+    if ((req.method != HttpMethod::Get && req.method != HttpMethod::Post
+            && req.method != HttpMethod::Put && req.method != HttpMethod::Delete
+            && req.method != HttpMethod::Head
+            && req.method != HttpMethod::Options
+            && req.method != HttpMethod::Connect
+            && req.method != HttpMethod::Trace
+            && req.method != HttpMethod::Patch)
         || req.path.empty() || req.path.front() != '/') {
         return tl::make_unexpected(
             std::make_error_code(std::errc::invalid_argument));
@@ -695,94 +695,68 @@ Result<HttpResponse> HttpConnection::request(const HttpRequest& req) const
 namespace http {
 Result<HttpResponse> get(std::string_view url)
 {
-    return HttpConnection::send_request(url,
-        { .method = HttpMethod::Get, .path = {}, .body = {}, .headers = {} });
+    return HttpConnection::send_request(url, { HttpMethod::Get, {}, {}, {} });
 }
 
 Result<HttpResponse> get(std::string_view url, const HttpHeaders& headers)
 {
-    return HttpConnection::send_request(url,
-        { .method = HttpMethod::Get,
-            .path = {},
-            .body = {},
-            .headers = headers });
+    return HttpConnection::send_request(
+        url, { HttpMethod::Get, {}, {}, headers });
 }
 
 Result<HttpResponse> post(std::string_view url, std::string_view body)
 {
-    return HttpConnection::send_request(url,
-        { .method = HttpMethod::Post,
-            .path = {},
-            .body = std::string { body },
-            .headers = {} });
+    return HttpConnection::send_request(
+        url, { HttpMethod::Post, {}, std::string { body }, {} });
 }
 
 Result<HttpResponse> put(std::string_view url, std::string_view body)
 {
-    return HttpConnection::send_request(url,
-        { .method = HttpMethod::Put,
-            .path = {},
-            .body = std::string { body },
-            .headers = {} });
+    return HttpConnection::send_request(
+        url, { HttpMethod::Put, {}, std::string { body }, {} });
 }
 
 Result<HttpResponse> del(std::string_view url)
 {
-    return HttpConnection::send_request(url,
-        { .method = HttpMethod::Delete,
-            .path = {},
-            .body = {},
-            .headers = {} });
+    return HttpConnection::send_request(
+        url, { HttpMethod::Delete, {}, {}, {} });
 }
 
 Result<HttpResponse> head(std::string_view url)
 {
-    return HttpConnection::send_request(url,
-        { .method = HttpMethod::Head, .path = {}, .body = {}, .headers = {} });
+    return HttpConnection::send_request(url, { HttpMethod::Head, {}, {}, {} });
 }
 
 Result<HttpResponse> options(std::string_view url)
 {
-    return HttpConnection::send_request(url,
-        { .method = HttpMethod::Options,
-            .path = {},
-            .body = {},
-            .headers = {} });
+    return HttpConnection::send_request(
+        url, { HttpMethod::Options, {}, {}, {} });
 }
 
 Result<HttpResponse> connect(std::string_view url)
 {
-    return HttpConnection::send_request(url,
-        { .method = HttpMethod::Connect,
-            .path = {},
-            .body = {},
-            .headers = {} });
+    return HttpConnection::send_request(
+        url, { HttpMethod::Connect, {}, {}, {} });
 }
 
 Result<HttpResponse> trace(std::string_view url)
 {
-    return HttpConnection::send_request(url,
-        { .method = HttpMethod::Trace, .path = {}, .body = {}, .headers = {} });
+    return HttpConnection::send_request(url, { HttpMethod::Trace, {}, {}, {} });
 }
 
 Result<HttpResponse> patch(std::string_view url, const std::string& body)
 {
-    return HttpConnection::send_request(url,
-        { .method = HttpMethod::Patch,
-            .path = {},
-            .body = body,
-            .headers = {} });
+    return HttpConnection::send_request(
+        url, { HttpMethod::Patch, {}, body, {} });
 }
 
 constexpr std::string_view status_message(HttpStatus status)
 {
 #define STATUS_CODE_CASE(code, msg)                                            \
-    case code:                                                                 \
+    case HttpStatus::code:                                                     \
         return msg;
 
     switch (status) {
-        using enum HttpStatus;
-
         STATUS_CODE_CASE(Continue, "Continue");
         STATUS_CODE_CASE(SwitchingProtocols, "Switching Protocols");
         STATUS_CODE_CASE(Processing, "Processing");
@@ -1016,19 +990,17 @@ Result<std::pair<HttpRequest, HttpConnection>> HttpServer::accept() const
         return tl::make_unexpected(req.error());
     }
 
-    return std::make_pair(
+    return std::make_pair<HttpRequest, HttpConnection>(
         std::move(*req), HttpConnection { std::move(stream->first), "" });
 }
 
 Result<void> HttpServer::handle_request(
     const net::HttpConnection& conn, HttpRequest& req) const
 {
-    const net::HttpResponse not_found { .status_code = HttpStatus::NotFound,
-        .status_message = {},
-        .body = {},
-        .headers = { { "Connection", "close" } } };
+    const net::HttpResponse not_found { HttpStatus::NotFound, {}, {},
+        { { "Connection", "close" } } };
 
-    if (!m_routes.contains(req.method)) {
+    if (m_routes.find(req.method) == m_routes.end()) {
         if (const auto res = conn.respond(not_found); !res) {
             return tl::make_unexpected(res.error());
         }
@@ -1078,11 +1050,11 @@ Result<void> HttpServer::handle_request(
         }
 
         const ServerHttpRequest server_req {
-            .method = req.method,
-            .path = std::move(req.path),
-            .params = std::move(params),
-            .body = std::move(req.body),
-            .headers = std::move(req.headers),
+            req.method,
+            std::move(req.path),
+            std::move(params),
+            std::move(req.body),
+            std::move(req.headers),
         };
 
         const auto response = route.handler(server_req);
@@ -1091,7 +1063,7 @@ Result<void> HttpServer::handle_request(
             return tl::make_unexpected(res.error());
         }
 
-        if (response.headers.contains("Connection")
+        if (response.headers.find("Connection") != response.headers.end()
             && response.headers.at("Connection") == "close") {
             return tl::make_unexpected(
                 std::make_error_code(std::errc::connection_reset));
