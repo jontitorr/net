@@ -144,8 +144,8 @@ int vs_dtls_generate_cookie(
     SSL* ssl, unsigned char* cookie, unsigned int* cookie_len)
 {
     std::array<unsigned char, EVP_MAX_MD_SIZE> result {};
-    unsigned int length = 0;
-    unsigned int result_length;
+    size_t length {};
+    unsigned int result_length {};
     union {
         sockaddr_storage storage;
         sockaddr_in ip4;

@@ -90,18 +90,18 @@ net::Result<std::array<std::byte, 16>> parse_ipv6_addr(
     std::string_view ipv6_str)
 {
     uint16_t accumulator {};
-    uint8_t colon_count {};
-    uint8_t pos {};
+    size_t colon_count {};
+    size_t pos {};
     std::array<std::byte, 16> result {};
 
     // Step 1: look for position of ::, and count colons after it
-    for (uint8_t i { 1 }; i <= MAX_IPV6_ADDRESS_STR_LEN && i < ipv6_str.size();
+    for (size_t i { 1 }; i <= MAX_IPV6_ADDRESS_STR_LEN && i < ipv6_str.size();
          ++i) {
         if (ipv6_str.at(i) == ':') {
             if (ipv6_str.at(i - 1) == ':') {
                 // Double colon!
                 colon_count = 14;
-            } else if (colon_count != 0u) {
+            } else if (colon_count != 0) {
                 // Count backwards the number of colons after the ::
                 colon_count -= 2;
             }
@@ -111,7 +111,7 @@ net::Result<std::array<std::byte, 16>> parse_ipv6_addr(
     }
 
     // Step 2: convert from ascii to binary
-    for (uint8_t i {};
+    for (size_t i {};
          i <= MAX_IPV6_ADDRESS_STR_LEN && i < ipv6_str.size() && pos < 16;
          ++i) {
         if (ipv6_str.at(i) == ':' || ipv6_str.at(i) == '\0') {
@@ -119,7 +119,7 @@ net::Result<std::array<std::byte, 16>> parse_ipv6_addr(
             result.at(pos + 1) = static_cast<std::byte>(accumulator & 0xff);
             accumulator = 0;
 
-            if ((colon_count != 0u) && (i != 0u) && ipv6_str.at(i - 1) == ':') {
+            if ((colon_count != 0) && (i != 0) && ipv6_str.at(i - 1) == ':') {
                 pos = colon_count;
             } else {
                 pos += 2;
@@ -133,7 +133,7 @@ net::Result<std::array<std::byte, 16>> parse_ipv6_addr(
                     std::errc::invalid_argument) };
             }
 
-            accumulator <<= 4;
+            accumulator = static_cast<uint16_t>(accumulator << 4);
             accumulator |= static_cast<uint16_t>(val);
         }
 

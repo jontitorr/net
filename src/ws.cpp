@@ -517,7 +517,7 @@ void WebSocketClient::process_data(std::vector<std::byte>& data)
             static_cast<uint64_t>(data[1] & std::byte { 0b01111111 }), {}, {} };
 
         const auto payload_start = [&frame] {
-            uint8_t ret { 2 };
+            size_t ret { 2 };
 
             if (frame.payload_length == 126) {
                 ret += 2;
@@ -561,8 +561,10 @@ void WebSocketClient::process_data(std::vector<std::byte>& data)
         }
 
         if (frame.mask) {
-            std::copy(data.begin() + payload_start - MASKING_KEY_SIZE,
-                data.begin() + payload_start, frame.masking_key.begin());
+            std::copy(data.begin() + static_cast<std::ptrdiff_t>(payload_start)
+                    - MASKING_KEY_SIZE,
+                data.begin() + static_cast<std::ptrdiff_t>(payload_start),
+                frame.masking_key.begin());
         }
 
         // If we don't have the complete payload, we must fetch it.
@@ -577,8 +579,9 @@ void WebSocketClient::process_data(std::vector<std::byte>& data)
             return disconnect();
         }
 
-        frame.payload = std::vector(data.begin() + payload_start,
-            data.begin() + payload_start
+        frame.payload = std::vector(
+            data.begin() + static_cast<std::ptrdiff_t>(payload_start),
+            data.begin() + static_cast<std::ptrdiff_t>(payload_start)
                 + static_cast<ptrdiff_t>(frame.payload_length));
 
         if (frame.mask) {
