@@ -15,8 +15,8 @@ on:
 
 jobs:
   linux:
-    name: Linux ${{matrix.arch}} (${{matrix.gcc-version}})
-    runs-on: ${{matrix.os}}
+    name: Linux ${{ matrix.arch }} (${{ matrix.gcc-version }})
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
@@ -34,7 +34,7 @@ jobs:
       - name: Configure CMake
         run: cmake -S . -B build -G Ninja
         env:
-          CXX: ${{matrix.gcc-version}}
+          CXX: ${{ matrix.gcc-version }}
 
       - name: Build
         run: cmake --build build --config Release
@@ -45,23 +45,26 @@ jobs:
       - name: Upload Binary (DEB)
         uses: actions/upload-artifact@v3
         with:
-          name: "libnet - Debian Package ${{matrix.arch}}"
-          path: "${{github.workspace}}/build/*.deb"
+          name: "libnet - Debian Package ${{ matrix.arch }}"
+          path: "${{ github.workspace }}/build/*.deb"
 
       - name: Upload Binary (RPM)
         uses: actions/upload-artifact@v3
         with:
-          name: "libnet - RPM Package ${{matrix.arch}}"
-          path: "${{github.workspace}}/build/*.rpm"
+          name: "libnet - RPM Package ${{ matrix.arch }}"
+          path: "${{ github.workspace }}/build/*.rpm"
   windows:
     strategy:
       fail-fast: false
       matrix:
         arch: [x64, x86]
         config: [Release, Debug]
+        vs:
+          - { name: 2019, version: 16, os: windows-2019 }
+          - { name: 2022, version: 17, os: windows-2022 }
 
-    name: "Windows ${{matrix.arch}}-${{matrix.config}}-vs2022"
-    runs-on: windows-2022
+    name: "Windows ${{ matrix.arch }}-${{ matrix.config }}-vs${{ matrix.vs.name }}"
+    runs-on: ${{ matrix.vs.os }}
     steps:
       - name: Checkout
         uses: actions/checkout@v3
@@ -71,20 +74,20 @@ jobs:
 
       - name: Configure CMake (x64)
         if: ${{ matrix.arch == 'x64' }}
-        run: cmake -S . -B build -G "Visual Studio 17 2022"
+        run: cmake -S . -B build -G "Visual Studio ${{ matrix.vs.version }} ${{ matrix.vs.name }}" -A x64 -T host=x64
 
       - name: Configure CMake (x86)
         if: ${{ matrix.arch == 'x86' }}
-        run: cmake -S . -B build -G "Visual Studio 17 2022" -A Win32 -T host=x86
+        run: cmake -S . -B build -G "Visual Studio ${{ matrix.vs.version }} ${{ matrix.vs.name }}" -A Win32 -T host=x86
 
       - name: Build
-        run: cmake --build build --config ${{matrix.config}}
+        run: cmake --build build --config ${{ matrix.config }}
 
       - name: Package
-        run: cd build && cpack -C ${{matrix.config}} --verbose
+        run: cd build && cpack -C ${{ matrix.config }} --verbose
 
       - name: Upload Binary
         uses: actions/upload-artifact@v3
         with:
-          name: "libnet - Windows ${{matrix.arch}}-${{matrix.config}}-vs2022"
-          path: "${{github.workspace}}/build/*.zip"
+          name: "libnet - Windows ${{ matrix.arch }}-${{ matrix.config }}-vs2022"
+          path: "${{ github.workspace }}/build/*.zip"
