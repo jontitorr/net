@@ -59,7 +59,7 @@ net::Result<void> addr_to_sockaddr(const net::SocketAddr& addr, F&& f)
 namespace net {
 Result<TcpStream> TcpStream::connect(SocketAddr addr)
 {
-    auto sock = Socket::create(addr, SOCK_STREAM);
+    auto sock = Socket::create(addr, Socket::Type::Stream);
 
     if (!sock) {
         return tl::make_unexpected(sock.error());
@@ -83,7 +83,7 @@ Result<TcpStream> TcpStream::connect(SocketAddr addr)
 
 Result<TcpListener> TcpListener::bind(SocketAddr addr)
 {
-    auto sock = Socket::create(addr, SOCK_STREAM);
+    auto sock = Socket::create(addr, Socket::Type::Stream);
 
     if (!sock) {
         return tl::make_unexpected(sock.error());

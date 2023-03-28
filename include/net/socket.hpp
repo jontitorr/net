@@ -23,8 +23,20 @@ struct NET_EXPORT Socket {
     Socket& operator=(Socket&&) noexcept;
     ~Socket();
 
-    static Result<Socket> create(SocketAddr addr, int type);
-    static Result<Socket> create_raw(int family, int type);
+    enum class Domain : uint8_t {
+        Ipv4,
+        Ipv6,
+    };
+
+    enum class Type : uint8_t {
+        Stream,
+        Dgram,
+        SeqPacket,
+        Raw,
+    };
+
+    static Result<Socket> create(SocketAddr addr, Type type);
+    static Result<Socket> create_raw(Domain family, Type type);
 
     [[nodiscard]] RawSocket as_raw_socket() const { return m_socket; }
     [[nodiscard]] bool is_valid() const { return m_socket != INVALID_SOCKET; }

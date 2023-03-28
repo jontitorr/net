@@ -131,22 +131,51 @@ Socket::~Socket()
     }
 }
 
-Result<Socket> Socket::create(SocketAddr addr, int type)
+Result<Socket> Socket::create(SocketAddr addr, Type type)
 {
-    return addr.is_ipv4() ? create_raw(AF_INET, type)
-                          : create_raw(AF_INET6, type);
+    return addr.is_ipv4() ? create_raw(Domain::Ipv4, type)
+                          : create_raw(Domain::Ipv6, type);
 }
 
-Result<Socket> Socket::create_raw(int family, int type)
+Result<Socket> Socket::create_raw(Domain family, Type type)
 {
     init();
 
+    if (family != Domain::Ipv4 && family != Domain::Ipv6) {
+        return tl::make_unexpected(
+            std::make_error_code(std::errc::invalid_argument));
+    }
+
+    const auto family_inner = family == Domain::Ipv4 ? AF_INET : AF_INET6;
+
+    if (type != Type::Stream && type != Type::Dgram && type != Type::SeqPacket
+        && type != Type::Raw) {
+        return tl::make_unexpected(
+            std::make_error_code(std::errc::invalid_argument));
+    }
+
+    const auto type_inner = [type] {
+        switch (type) {
+        case Type::Stream:
+            return SOCK_STREAM;
+        case Type::Dgram:
+            return SOCK_DGRAM;
+        case Type::SeqPacket:
+            return SOCK_SEQPACKET;
+        case Type::Raw:
+            return SOCK_RAW;
+        }
+
+        // unreachable
+        return SOCK_STREAM;
+    }();
+
 #ifdef _WIN32
-    auto sock = WSASocketW(family, type, 0, nullptr, 0,
+    auto sock = WSASocketW(family_inner, type_inner, 0, nullptr, 0,
         WSA_FLAG_OVERLAPPED | WSA_FLAG_NO_HANDLE_INHERIT);
 #else
 #ifdef SOCK_CLOEXEC
-    auto sock = socket(family, type | SOCK_CLOEXEC, 0);
+    auto sock = socket(family_inner, type_inner | SOCK_CLOEXEC, 0);
 #else
     auto sock = socket(family, type, 0);
 #endif
@@ -177,9 +206,10 @@ Result<Socket> Socket::create_raw(int family, int type)
 
 // Try again without SOCK_CLOEXEC.
 #ifdef _WIN32
-    sock = WSASocketW(family, type, 0, nullptr, 0, WSA_FLAG_OVERLAPPED);
+    sock = WSASocketW(
+        family_inner, type_inner, 0, nullptr, 0, WSA_FLAG_OVERLAPPED);
 #else
-    sock = socket(family, type, 0);
+    sock = socket(family_inner, type_inner, 0);
 #endif
 
     if (sock != INVALID_SOCKET) {

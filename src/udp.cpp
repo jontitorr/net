@@ -109,7 +109,7 @@ net::Result<net::SocketAddr> do_something_with_sockaddr(F&& f)
 namespace net {
 Result<UdpSocket> UdpSocket::bind(SocketAddr addr)
 {
-    auto sock = Socket::create(addr, SOCK_DGRAM);
+    auto sock = Socket::create(addr, Socket::Type::Dgram);
 
     if (!sock) {
         return tl::make_unexpected(sock.error());
