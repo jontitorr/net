@@ -39,6 +39,8 @@ if(BUILD_SHARED_LIBS)
     set(CMAKE_VISIBILITY_INLINES_HIDDEN 1)
 endif()
 
+find_package(Threads REQUIRED)
+
 function(download_and_include file_name url)
     if(NOT EXISTS "${CMAKE_BINARY_DIR}/${file_name}")
         file(DOWNLOAD "${url}" "${CMAKE_BINARY_DIR}/${file_name}" TLS_VERIFY ON)
@@ -138,7 +140,11 @@ else()
     list(APPEND SEPARATE_DEPENDENCIES "OpenSSL")
 endif()
 
-target_link_libraries(${PROJECT_NAME} PUBLIC span tl-expected)
+target_link_libraries(
+    ${PROJECT_NAME}
+    PRIVATE Threads::Threads
+    PUBLIC span tl-expected
+)
 
 if(WIN32)
     target_link_libraries(${PROJECT_NAME} PRIVATE wsock32 ws2_32)

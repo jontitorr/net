@@ -163,8 +163,8 @@ net::Result<void> read_until_size_is(
         container.resize(container.size() + needed);
 
         do {
-            const auto res = stream.read(
-                tcb::as_writable_bytes(tcb::span { container }.subspan(
+            const auto res = stream.read(tcb::as_writable_bytes(
+                tcb::span<typename Container::value_type> { container }.subspan(
                     container.size() - needed, needed)));
 
             if (!res) {
