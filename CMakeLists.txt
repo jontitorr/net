@@ -33,6 +33,16 @@ option(BUILD_SHARED_LIBS "Build shared libraries" ON)
 option(${PROJECT_NAME}_BUILD_EXAMPLES "Build the examples" OFF)
 option(${PROJECT_NAME}_INSTALL "Generate the install target" ON)
 
+include(CMakeDependentOption)
+
+cmake_dependent_option(
+    ${PROJECT_NAME}_OPENSSL_SHARED
+    "Use shared OpenSSL libraries"
+    ON
+    "UNIX;BUILD_SHARED_LIBS"
+    OFF
+)
+
 if(BUILD_SHARED_LIBS)
     set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS OFF)
     set(CMAKE_CXX_VISIBILITY_PRESET hidden)
@@ -62,7 +72,7 @@ cpmfindpackage(
     GIT_TAG
     "master"
     OPTIONS
-    "BUILD_SHARED_LIBS ON"
+    "BUILD_SHARED_LIBS ${${PROJECT_NAME}_OPENSSL_SHARED}"
     "WITH_APPS OFF"
 )
 if(NOT EXISTS "${CMAKE_BINARY_DIR}/_deps/span-src/tcb/span.hpp")
@@ -147,7 +157,13 @@ target_link_libraries(
 )
 
 if(WIN32)
-    target_link_libraries(${PROJECT_NAME} PRIVATE wsock32 ws2_32)
+    set (WIN_TARGETS wsock32 ws2_32)
+
+    if (NOT ${PROJECT_NAME}_OPENSSL_SHARED)
+        list(APPEND WIN_TARGETS crypt32)
+    endif()
+
+    target_link_libraries(${PROJECT_NAME} PRIVATE ${WIN_TARGETS})
 endif()
 
 add_library(${PROJECT_NAME}::${PROJECT_NAME} ALIAS ${PROJECT_NAME})

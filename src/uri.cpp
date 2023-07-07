@@ -23,7 +23,7 @@ char get_safe_char(
 
 std::vector<std::string> split(std::string_view s, std::string_view delimiter)
 {
-    std::vector<std::string> ret {};
+    std::vector<std::string> ret;
     size_t pos {};
     size_t prev {};
 
@@ -74,7 +74,7 @@ void parse_authority(net::Uri& uri_struct, std::string_view authority)
 
     const auto user_info_end_plus
         = user_info_end == std::string::npos ? 0 : user_info_end + 1;
-    std::string_view port_str {};
+    std::string_view port_str;
 
     // If the authority at index user_info_end_plus is a '[' then we have an
     // IPv6 address.
@@ -296,7 +296,7 @@ std::string Uri::url_decode(std::string_view str)
 
 std::string Uri::to_string() const
 {
-    std::string ret {};
+    std::string ret;
 
     if (!scheme.empty()) {
         ret += scheme;

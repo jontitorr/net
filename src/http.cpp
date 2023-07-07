@@ -100,7 +100,7 @@ Result<std::string> http_method_to_str(const HttpMethod method)
 
 std::vector<std::string> split(std::string_view s, std::string_view delimiter)
 {
-    std::vector<std::string> ret {};
+    std::vector<std::string> ret;
     size_t pos {};
     size_t prev {};
 
@@ -185,7 +185,7 @@ HttpHeaders parse_headers(std::string_view headers)
 template<typename Stream>
 Result<HttpResponse> receive_http_response(Stream& stream)
 {
-    HttpResponse response {};
+    HttpResponse response;
     std::string response_str(1024, '\0');
     size_t end_of_headers {};
     size_t response_len {};
@@ -414,7 +414,7 @@ template<typename Stream>
 Result<void> send_http_response(const Stream& stream, const HttpResponse& res)
 {
     auto status_str = status_message(res.status_code);
-    std::string response_str {};
+    std::string response_str;
 
     response_str.append("HTTP/1.1 ")
         .append(std::to_string(static_cast<int>(res.status_code)))
