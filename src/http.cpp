@@ -560,7 +560,7 @@ Result<SocketAddr> lookup_address(const std::string& host, int port)
 } // namespace
 
 namespace net {
-constexpr std::string_view method_name(HttpMethod method)
+std::string method_name(HttpMethod method)
 {
     switch (method) {
     case HttpMethod::Get:

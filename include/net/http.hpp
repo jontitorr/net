@@ -19,7 +19,7 @@ enum class HttpMethod {
     Patch,
 };
 
-[[nodiscard]] constexpr std::string_view method_name(HttpMethod method);
+[[nodiscard]] std::string method_name(HttpMethod method);
 
 struct HttpRequest {
     HttpMethod method;
