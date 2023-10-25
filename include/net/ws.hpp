@@ -67,7 +67,9 @@ struct WebSocketClient {
 private:
     friend struct WebSocketClientBuilder;
 
-    WebSocketClient(Uri uri, const std::function<void()>& on_close,
+    WebSocketClient(Uri uri,
+        const std::function<void(WebSocketCloseCode, std::string_view)>&
+            on_close,
         const std::function<void()>& on_connect,
         const std::function<void(WebSocketMessage)>& on_message,
         bool auto_reconnect)
@@ -95,7 +97,7 @@ private:
 
     std::optional<HttpConnection> m_http_connection;
     Uri m_uri;
-    std::function<void()> m_on_close;
+    std::function<void(WebSocketCloseCode, std::string_view)> m_on_close;
     std::function<void()> m_on_connect;
     std::function<void(WebSocketMessage)> m_on_message;
     std::vector<std::byte> m_read_buffer;
@@ -107,9 +109,11 @@ private:
     struct CloseFlags {
         uint8_t client : 1;
         uint8_t server : 1;
+        WebSocketCloseCode code;
+        std::string reason;
     };
 
-    CloseFlags m_close_flags { 0, 0 };
+    CloseFlags m_close_flags { 0, 0, WebSocketCloseCode::Normal, {} };
 
     enum class ConnectionState : uint8_t {
         Connecting,
@@ -151,14 +155,14 @@ private:
             std::mutex m_mtx;
         };
 
-        std::atomic_bool missed_heartbeat;
+        std::atomic_bool missed_heartbeat {};
         Flag activity_flag;
         Flag heartbeat_flag;
         Flag read_flag;
         mutable std::mutex heartbeat_mtx;
         mutable std::mutex mtx;
         std::condition_variable cv;
-        std::atomic_bool auto_reconnect;
+        std::atomic_bool auto_reconnect {};
     };
 
     std::unique_ptr<State> m_state { std::make_unique<State>() };
@@ -185,7 +189,8 @@ struct WebSocketClientBuilder {
     }
 
     NET_EXPORT WebSocketClientBuilder& with_on_close(
-        const std::function<void()>& on_close)
+        const std::function<void(WebSocketCloseCode, std::string_view)>&
+            on_close)
     {
         m_on_close = on_close;
         return *this;
@@ -210,7 +215,7 @@ struct WebSocketClientBuilder {
 private:
     std::string m_url;
     bool m_auto_reconnect {};
-    std::function<void()> m_on_close;
+    std::function<void(WebSocketCloseCode, std::string_view)> m_on_close;
     std::function<void()> m_on_connect;
     std::function<void(WebSocketMessage)> m_on_message;
 };

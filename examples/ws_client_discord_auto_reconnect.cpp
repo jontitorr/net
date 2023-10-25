@@ -10,8 +10,11 @@ int main()
     auto client
         = net::WebSocketClientBuilder {}
               .with_auto_reconnect(true)
-              .with_on_close([&connected] {
-                  std::cout << "Connection closed\n";
+              .with_on_close([&connected](net::WebSocketCloseCode code,
+                                 std::string_view reason) {
+                  std::cout << "Connection closed | code="
+                            << static_cast<uint16_t>(code)
+                            << " | reason=" << reason << '\n';
                   connected = false;
               })
               .with_on_connect([&connected] {

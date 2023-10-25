@@ -333,7 +333,7 @@ void WebSocketClient::disconnect()
 
         if (m_on_close) {
             lk.unlock();
-            m_on_close();
+            m_on_close(m_close_flags.code, m_close_flags.reason);
             lk.lock();
         }
 
@@ -625,7 +625,21 @@ void WebSocketClient::process_data(std::vector<std::byte>& data)
         }
         case WebSocketOpcode::Close: {
             m_close_flags.server = 1;
-            close();
+
+            if (frame.payload.size() >= 2) {
+                m_close_flags.code = static_cast<WebSocketCloseCode>(
+                    (static_cast<uint16_t>(frame.payload[0]) << 8)
+                    | static_cast<uint16_t>(frame.payload[1]));
+                m_close_flags.reason = {
+                    reinterpret_cast<const char*>(frame.payload.data() + 2),
+                    frame.payload.size() - 2,
+                };
+
+                close(m_close_flags.code, m_close_flags.reason);
+            } else {
+                close();
+            }
+
             break;
         }
         case WebSocketOpcode::Ping: {
