@@ -51,18 +51,7 @@ endif()
 
 find_package(Threads REQUIRED)
 
-function(download_and_include file_name url)
-    if(NOT EXISTS "${CMAKE_BINARY_DIR}/${file_name}")
-        file(DOWNLOAD "${url}" "${CMAKE_BINARY_DIR}/${file_name}" TLS_VERIFY ON)
-    endif()
-
-    include(${CMAKE_BINARY_DIR}/${file_name})
-endfunction()
-
-download_and_include(
-    "CPM.cmake"
-    "https://github.com/cpm-cmake/CPM.cmake/releases/latest/download/get_cpm.cmake"
-)
+include(cmake/CPM.cmake)
 
 cpmfindpackage(
     NAME
@@ -170,10 +159,7 @@ add_library(${PROJECT_NAME}::${PROJECT_NAME} ALIAS ${PROJECT_NAME})
 
 set(${PROJECT_NAME}_WARNINGS_AS_ERRORS ON)
 
-download_and_include(
-    "CompilerWarnings.cmake"
-    "https://raw.githubusercontent.com/filipdutescu/modern-cpp-template/master/cmake/CompilerWarnings.cmake"
-)
+include(cmake/CompilerWarnings.cmake)
 
 set_project_warnings(${PROJECT_NAME})
 
