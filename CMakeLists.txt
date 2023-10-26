@@ -32,15 +32,13 @@ string(TOUPPER ${PROJECT_NAME} PROJECT_NAME_UPPERCASE)
 option(BUILD_SHARED_LIBS "Build shared libraries" ON)
 option(${PROJECT_NAME}_BUILD_EXAMPLES "Build the examples" OFF)
 option(${PROJECT_NAME}_INSTALL "Generate the install target" ON)
+option(${PROJECT_NAME}_FORCE_BUILD_OPENSSL "Force building of OpenSSL" OFF)
 
 include(CMakeDependentOption)
 
 cmake_dependent_option(
-    ${PROJECT_NAME}_OPENSSL_SHARED
-    "Use shared OpenSSL libraries"
-    ON
-    "UNIX;BUILD_SHARED_LIBS"
-    OFF
+    ${PROJECT_NAME}_OPENSSL_SHARED "Use shared OpenSSL libraries" ON
+    "UNIX;BUILD_SHARED_LIBS" OFF
 )
 
 if(BUILD_SHARED_LIBS)
@@ -53,17 +51,32 @@ find_package(Threads REQUIRED)
 
 include(cmake/CPM.cmake)
 
-cpmfindpackage(
-    NAME
-    "OpenSSL"
-    GITHUB_REPOSITORY
-    "Xminent/openssl-cmake"
-    GIT_TAG
-    "master"
-    OPTIONS
-    "BUILD_SHARED_LIBS ${${PROJECT_NAME}_OPENSSL_SHARED}"
-    "WITH_APPS OFF"
-)
+if(${PROJECT_NAME}_FORCE_BUILD_OPENSSL)
+    cpmaddpackage(
+        NAME
+        "OpenSSL"
+        GITHUB_REPOSITORY
+        "Xminent/openssl-cmake"
+        GIT_TAG
+        "master"
+        OPTIONS
+        "BUILD_SHARED_LIBS ${${PROJECT_NAME}_OPENSSL_SHARED}"
+        "WITH_APPS OFF"
+    )
+else()
+    cpmfindpackage(
+        NAME
+        "OpenSSL"
+        GITHUB_REPOSITORY
+        "Xminent/openssl-cmake"
+        GIT_TAG
+        "master"
+        OPTIONS
+        "BUILD_SHARED_LIBS ${${PROJECT_NAME}_OPENSSL_SHARED}"
+        "WITH_APPS OFF"
+    )
+endif()
+
 if(NOT EXISTS "${CMAKE_BINARY_DIR}/_deps/span-src/tcb/span.hpp")
     file(
         DOWNLOAD
@@ -146,9 +159,9 @@ target_link_libraries(
 )
 
 if(WIN32)
-    set (WIN_TARGETS wsock32 ws2_32)
+    set(WIN_TARGETS wsock32 ws2_32)
 
-    if (NOT ${PROJECT_NAME}_OPENSSL_SHARED)
+    if(NOT ${PROJECT_NAME}_OPENSSL_SHARED)
         list(APPEND WIN_TARGETS crypt32)
     endif()
 

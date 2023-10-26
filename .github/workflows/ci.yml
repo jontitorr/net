@@ -82,7 +82,7 @@ jobs:
 
       - name: Configure CMake (x86)
         if: ${{ matrix.arch == 'x86' }}
-        run: cmake -S . -B build -G "Visual Studio ${{ matrix.vs.version }} ${{ matrix.vs.name }}" -A Win32 -T host=x86
+        run: cmake -S . -B build -D net_FORCE_BUILD_OPENSSL=ON -G "Visual Studio ${{ matrix.vs.version }} ${{ matrix.vs.name }}" -A Win32 -T host=x86
 
       - name: Build
         run: cmake --build build --config ${{ matrix.config }}
