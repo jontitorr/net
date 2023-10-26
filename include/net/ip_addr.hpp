@@ -1,6 +1,7 @@
 #pragma once
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <net/export.h>
 #include <net/util.hpp>
 #include <string_view>
