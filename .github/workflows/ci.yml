@@ -93,5 +93,5 @@ jobs:
       - name: Upload Binary
         uses: actions/upload-artifact@v3
         with:
-          name: "libnet - Windows ${{ matrix.arch }}-${{ matrix.config }}-${{ matrix.vs.name }}"
+          name: "libnet - Windows ${{ matrix.arch }}-${{ matrix.config }}-vs${{ matrix.vs.name }}"
           path: "${{ github.workspace }}/build/*.zip"
