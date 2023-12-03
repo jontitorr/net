@@ -1,4 +1,5 @@
 #include <cassert>
+#include <cstdint>
 #include <cstring>
 #include <limits>
 #include <net/socket.hpp>

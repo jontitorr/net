@@ -1,9 +1,8 @@
+#include <cstdint>
 #include <cstring>
-#include <iomanip>
 #include <limits>
 #include <net/ip_addr.hpp>
 #include <numeric>
-#include <sstream>
 #include <string>
 
 namespace {
