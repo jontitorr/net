@@ -1,4 +1,5 @@
 #pragma once
+#include <cstdint>
 #include <net/ip_addr.hpp>
 #include <string>
 #include <variant>
