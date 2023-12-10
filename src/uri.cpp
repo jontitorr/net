@@ -92,15 +92,8 @@ void parse_authority(net::Uri& uri_struct, std::string_view authority)
             port_str = authority.substr(user_info_end_plus + ipv6_end + 2);
         }
     } else {
-#if defined(__GNUC__) && !defined(__clang__)
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wstringop-overread"
-#endif
         // Find the end of the host.
         auto host_end = authority.substr(user_info_end_plus).find(':');
-#if defined(__GNUC__) && !defined(__clang__)
-#pragma GCC diagnostic pop
-#endif
 
         if (host_end == std::string::npos) {
             host_end = authority.length();

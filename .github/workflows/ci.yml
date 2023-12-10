@@ -25,7 +25,7 @@ jobs:
       fail-fast: false
       matrix:
         arch: [amd64]
-        gcc-version: ["g++-9", "g++-10", "g++-11", "g++-12"]
+        gcc-version: ["g++-9", "g++-10", "g++-12"]
         os: ["ubuntu-22.04"]
 
     steps:
