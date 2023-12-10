@@ -93,7 +93,7 @@ void parse_authority(net::Uri& uri_struct, std::string_view authority)
         }
     } else {
         // Find the end of the host.
-        auto host_end = authority.substr(user_info_end_plus).find(':');
+        size_t host_end = authority.substr(user_info_end_plus).find(':');
 
         if (host_end == std::string::npos) {
             host_end = authority.length();
